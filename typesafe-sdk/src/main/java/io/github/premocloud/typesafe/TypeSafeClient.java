@@ -181,7 +181,7 @@ public final class TypeSafeClient {
 
     private <T> T send(HttpRequest.Builder template, Class<T> type, RequestOptions options) {
         Duration timeout = Objects.requireNonNullElse(options.timeout(), this.timeout);
-        RetryPolicy retryPolicy = Objects.requireNonNullElse(options.retryPolicy(), this.retryPolicy);
+        RetryPolicy retryPolicy = options.resolveRetryPolicy(this.retryPolicy);
         Map<String, String> headers = new LinkedHashMap<>(defaultHeaders);
         headers.putAll(options.headers());
         template.timeout(timeout)

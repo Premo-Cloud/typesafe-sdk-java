@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -248,6 +249,31 @@ class TypeSafeClientTest {
         assertEquals("t2", server.recorded().get(2).headers().getFirst("X-Trace"));
         assertEquals("review", server.recorded().get(2).headers().getFirst("X-Team"));
         assertThrows(IllegalArgumentException.class, () -> RequestOptions.of(o -> o.timeout(Duration.ZERO)));
+    }
+
+    @Test
+    void perCallMaxRetriesKeepsTheRestOfTheClientPolicy() {
+        TypeSafeClient onlyRetries503 = TypeSafeClient.builder().apiKey(API_KEY).baseUrl(server.baseUrl())
+                .retryPolicy(RetryPolicy.of(r -> r.maxRetries(0).httpStatuses(Set.of(503)).backoffInitial(Duration.ofMillis(1)))).build();
+
+        server.reply(500, "not retryable for this client");
+        assertThrows(TypeSafeInternalServerException.class,
+                () -> onlyRetries503.systemOne(spamRequest(), RequestOptions.of(o -> o.maxRetries(2))));
+        assertEquals(1, server.recorded().size());
+
+        server.reply(503, "busy");
+        server.reply(503, "still busy");
+        assertThrows(TypeSafeInternalServerException.class,
+                () -> onlyRetries503.systemOne(spamRequest(), RequestOptions.of(o -> o.maxRetries(1))));
+        assertEquals(3, server.recorded().size());
+
+        RetryPolicy callPolicy = RetryPolicy.of(r -> r.maxRetries(0).httpStatuses(Set.of(500)).backoffInitial(Duration.ofMillis(1)));
+        server.reply(500, "one");
+        server.reply(200, RESPONSE_JSON);
+        onlyRetries503.systemOne(spamRequest(), RequestOptions.of(o -> o.retryPolicy(callPolicy).maxRetries(1)));
+        assertEquals(5, server.recorded().size());
+
+        assertThrows(IllegalArgumentException.class, () -> RequestOptions.of(o -> o.maxRetries(-1)));
     }
 
     @Test
