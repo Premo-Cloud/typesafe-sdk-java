@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 - 2026-09-19
 
 - Async API: `systemOneAsync` mirroring every `systemOne` overload and `models().listAsync()` return `CompletableFuture`s driven by `HttpClient.sendAsync`, so retries back off without holding a thread, honoring the same per-call `RequestOptions` and failing with the same `TypeSafeException` subclasses as the blocking calls (#4).
 
