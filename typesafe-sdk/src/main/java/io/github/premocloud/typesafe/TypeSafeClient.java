@@ -20,7 +20,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /**
@@ -125,16 +129,200 @@ public final class TypeSafeClient {
      * @throws TypeSafeConnectionException when the request cannot be delivered after retries; {@link TypeSafeTimeoutException} on timeout
      */
     public TypeSafeResponse systemOne(TypeSafeRequest request, RequestOptions options) {
-        TypeSafeRequest resolved = Objects.isNull(request.model()) ? request.withModel(defaultModel) : request;
-        TypeSafeResponse response = post(SYSTEM_ONE_PATH, resolved, TypeSafeResponse.class, options);
+        return blocking(systemOneAsync(request, options));
+    }
 
+    /** {@code client.systemOneAsync(state, Map.of("category", Choice.of("Which?", "billing", "technical")))}. */
+    public CompletableFuture<TypeSafeResponse> systemOneAsync(Object state, Map<String, ? extends TypeSafeQuestion> questions) {
+        return systemOneAsync(TypeSafeRequest.of(state, questions), RequestOptions.NONE);
+    }
+
+    public CompletableFuture<TypeSafeResponse> systemOneAsync(Object state, Map<String, ? extends TypeSafeQuestion> questions, RequestOptions options) {
+        return systemOneAsync(TypeSafeRequest.of(state, questions), options);
+    }
+
+    /** {@code client.systemOneAsync(r -> r.state(ticket).noul("urgent", n -> n.instructions("Is `ticket` urgent?")))}. */
+    public CompletableFuture<TypeSafeResponse> systemOneAsync(Consumer<TypeSafeRequest.Builder> configure) {
+        return systemOneAsync(TypeSafeRequest.of(configure), RequestOptions.NONE);
+    }
+
+    public CompletableFuture<TypeSafeResponse> systemOneAsync(Consumer<TypeSafeRequest.Builder> configure, RequestOptions options) {
+        return systemOneAsync(TypeSafeRequest.of(configure), options);
+    }
+
+    public CompletableFuture<TypeSafeResponse> systemOneAsync(TypeSafeRequest request) {
+        return systemOneAsync(request, RequestOptions.NONE);
+    }
+
+    /**
+     * Evaluates every question in the request against its state, in one round trip per attempt, retrying per the
+     * policy without holding a thread between attempts.
+     *
+     * <p>Request-setup errors (an invalid {@link TypeSafeRequest} or {@link RequestOptions}) throw synchronously,
+     * exactly as in the blocking call. Everything else the blocking call reports completes the returned future
+     * exceptionally with the same {@link TypeSafeException} subclass.
+     *
+     * @param options per-call timeout, retry, and header overrides; {@link RequestOptions#NONE} inherits the client's
+     */
+    public CompletableFuture<TypeSafeResponse> systemOneAsync(TypeSafeRequest request, RequestOptions options) {
+        TypeSafeRequest resolved = Objects.isNull(request.model()) ? request.withModel(defaultModel) : request;
+
+        return postAsync(SYSTEM_ONE_PATH, resolved, TypeSafeResponse.class, options).thenCompose(response -> {
+            try {
+                validateSystemOneResponse(resolved, response);
+                return CompletableFuture.completedFuture(response);
+            } catch (TypeSafeException e) {
+                return CompletableFuture.failedFuture(e);
+            }
+        });
+    }
+
+    <T> CompletableFuture<T> getAsync(String path, Class<T> type, RequestOptions options) {
+        return sendAsync(HttpRequest.newBuilder(URI.create(baseUrl + path)).GET(), type, options);
+    }
+
+    private <T> CompletableFuture<T> postAsync(String path, Object body, Class<T> type, RequestOptions options) {
+        String json;
+
+        try {
+            json = objectMapper.writeValueAsString(body);
+        } catch (JsonProcessingException e) {
+            return CompletableFuture.failedFuture(new TypeSafeException("Could not serialize request: " + e.getOriginalMessage(), e));
+        }
+
+        return sendAsync(HttpRequest.newBuilder(URI.create(baseUrl + path))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json)), type, options);
+    }
+
+    private <T> CompletableFuture<T> sendAsync(HttpRequest.Builder template, Class<T> type, RequestOptions options) {
+        Duration timeout = Objects.requireNonNullElse(options.timeout(), this.timeout);
+        RetryPolicy retryPolicy = options.resolveRetryPolicy(this.retryPolicy);
+        Map<String, String> headers = new LinkedHashMap<>(defaultHeaders);
+        headers.putAll(options.headers());
+        template.timeout(timeout)
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Accept", "application/json")
+                .header("User-Agent", SDK_NAME + "/" + VERSION)
+                .header("X-TypeSafe-SDK", SDK_NAME + "/" + VERSION)
+                .header("X-TypeSafe-Runtime", "java/" + System.getProperty("java.version"));
+        headers.forEach(template::header);
+
+        return attemptAsync(template, type, timeout, retryPolicy, 0);
+    }
+
+    /** One attempt, its retry decision, and its exception mapping: the path both blocking and async calls share. */
+    private <T> CompletableFuture<T> attemptAsync(HttpRequest.Builder template, Class<T> type, Duration timeout, RetryPolicy retryPolicy, int attempt) {
+        // Setup throws here (a bad URI, a closed client) propagate synchronously, as HttpClient.sendAsync does.
+        HttpRequest httpRequest = attempt == 0 ? template.build() : template.copy().header(RETRY_COUNT_HEADER, Integer.toString(attempt)).build();
+        CompletableFuture<HttpResponse<String>> sent = httpClient.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofString());
+
+        return sent.<CompletableFuture<T>>handle((response, error) -> {
+            try {
+                if (Objects.nonNull(error)) {
+                    Throwable cause = unwrap(error);
+
+                    if (cause instanceof HttpTimeoutException httpTimeout) {
+                        if (retryPolicy.retryTimeouts() && attempt < retryPolicy.maxRetries()) {
+                            return retryAsync(backoff(retryPolicy, attempt, Optional.empty()), template, type, timeout, retryPolicy, attempt + 1);
+                        }
+
+                        return CompletableFuture.<T>failedFuture(new TypeSafeTimeoutException(timeout, httpTimeout));
+                    }
+
+                    if (cause instanceof IOException ioException) {
+                        if (retryPolicy.retryConnectionErrors() && attempt < retryPolicy.maxRetries()) {
+                            return retryAsync(backoff(retryPolicy, attempt, Optional.empty()), template, type, timeout, retryPolicy, attempt + 1);
+                        }
+
+                        return CompletableFuture.<T>failedFuture(new TypeSafeConnectionException("Connection error: " + ioException.getMessage(), ioException));
+                    }
+
+                    return CompletableFuture.<T>failedFuture(cause);
+                }
+
+                int status = response.statusCode();
+
+                if (status >= 200 && status < 300) {
+                    return CompletableFuture.completedFuture(deserialize(response.body(), type));
+                }
+
+                if (retryPolicy.retriesStatus(status) && attempt < retryPolicy.maxRetries()) {
+                    return retryAsync(backoff(retryPolicy, attempt, retryPolicy.respectRetryAfter() ? RetryAfter.parse(response.headers()) : Optional.empty()),
+                            template, type, timeout, retryPolicy, attempt + 1);
+                }
+
+                return CompletableFuture.<T>failedFuture(TypeSafeApiException.fromResponse(status, response.body(), response.headers()));
+            } catch (Throwable t) {
+                return CompletableFuture.<T>failedFuture(t);
+            }
+        }).thenCompose(next -> next);
+    }
+
+    /** Schedules the next attempt on the JDK's shared delayer, so backoff never parks a thread of ours. */
+    private <T> CompletableFuture<T> retryAsync(Duration delay, HttpRequest.Builder template, Class<T> type, Duration timeout, RetryPolicy retryPolicy, int attempt) {
+        return CompletableFuture.supplyAsync(() -> attemptAsync(template, type, timeout, retryPolicy, attempt),
+                        CompletableFuture.delayedExecutor(delay.toMillis(), TimeUnit.MILLISECONDS))
+                .thenCompose(next -> next);
+    }
+
+    /** Waits on an async call, throwing the failure the blocking API throws instead of a wrapper. */
+    static <T> T blocking(CompletableFuture<T> future) {
+        try {
+            return future.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new TypeSafeConnectionException("Request interrupted", e);
+        } catch (ExecutionException e) {
+            Throwable cause = unwrap(e);
+
+            if (cause instanceof TypeSafeException typeSafeException) {
+                throw typeSafeException;
+            }
+
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+
+            if (cause instanceof Error error) {
+                throw error;
+            }
+
+            throw new TypeSafeException("Request failed: " + cause.getMessage(), cause);
+        }
+    }
+
+    /** Completion and execution futures wrap the thrown exception; walk down to the one the caller should see. */
+    private static Throwable unwrap(Throwable error) {
+        Throwable cause = error;
+
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException) && Objects.nonNull(cause.getCause())) {
+            cause = cause.getCause();
+        }
+
+        return cause;
+    }
+
+    /** A server-supplied delay within the cap wins; otherwise capped exponential backoff with jitter subtracted. */
+    private static Duration backoff(RetryPolicy retryPolicy, int attempt, Optional<Duration> retryAfter) {
+        if (retryAfter.isPresent() && retryAfter.get().compareTo(retryPolicy.maxRetryAfter()) <= 0) {
+            return retryAfter.get();
+        }
+
+        long exponential = Math.min(retryPolicy.backoffInitial().toMillis() * (1L << Math.min(attempt, 30)), retryPolicy.backoffMax().toMillis());
+        return Duration.ofMillis(Math.round(exponential * (1 - ThreadLocalRandom.current().nextDouble() * retryPolicy.backoffJitter())));
+    }
+
+    /**
+     * Every question asked must come back answered, and answered as its own type. Either gap otherwise
+     * surfaces later, when the caller reads that key, as an IllegalArgumentException no catch of
+     * TypeSafeException would see.
+     */
+    private static void validateSystemOneResponse(TypeSafeRequest resolved, TypeSafeResponse response) {
         if (Objects.isNull(response.answers())) {
             throw new TypeSafeException("TypeSafe response has no answers");
         }
 
-        // Every question asked must come back answered, and answered as its own type. Either gap otherwise
-        // surfaces later, when the caller reads that key, as an IllegalArgumentException no catch of
-        // TypeSafeException would see.
         Set<String> unanswered = new LinkedHashSet<>();
         Set<String> mistyped = new LinkedHashSet<>();
 
@@ -156,98 +344,6 @@ public final class TypeSafeClient {
         if (!mistyped.isEmpty()) {
             throw new TypeSafeException("TypeSafe response answered %s with a different type than was asked"
                     .formatted(mistyped));
-        }
-
-        return response;
-    }
-
-    <T> T get(String path, Class<T> type, RequestOptions options) {
-        return send(HttpRequest.newBuilder(URI.create(baseUrl + path)).GET(), type, options);
-    }
-
-    private <T> T post(String path, Object body, Class<T> type, RequestOptions options) {
-        String json;
-
-        try {
-            json = objectMapper.writeValueAsString(body);
-        } catch (JsonProcessingException e) {
-            throw new TypeSafeException("Could not serialize request: " + e.getOriginalMessage(), e);
-        }
-
-        return send(HttpRequest.newBuilder(URI.create(baseUrl + path))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(json)), type, options);
-    }
-
-    private <T> T send(HttpRequest.Builder template, Class<T> type, RequestOptions options) {
-        Duration timeout = Objects.requireNonNullElse(options.timeout(), this.timeout);
-        RetryPolicy retryPolicy = options.resolveRetryPolicy(this.retryPolicy);
-        Map<String, String> headers = new LinkedHashMap<>(defaultHeaders);
-        headers.putAll(options.headers());
-        template.timeout(timeout)
-                .header("Authorization", "Bearer " + apiKey)
-                .header("Accept", "application/json")
-                .header("User-Agent", SDK_NAME + "/" + VERSION)
-                .header("X-TypeSafe-SDK", SDK_NAME + "/" + VERSION)
-                .header("X-TypeSafe-Runtime", "java/" + System.getProperty("java.version"));
-        headers.forEach(template::header);
-
-        for (int attempt = 0; ; attempt++) {
-            HttpRequest httpRequest = attempt == 0 ? template.build() : template.copy().header(RETRY_COUNT_HEADER, Integer.toString(attempt)).build();
-            HttpResponse<String> httpResponse;
-
-            try {
-                httpResponse = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
-            } catch (HttpTimeoutException e) {
-                if (retryPolicy.retryTimeouts() && attempt < retryPolicy.maxRetries()) {
-                    pause(backoff(retryPolicy, attempt, Optional.empty()));
-                    continue;
-                }
-
-                throw new TypeSafeTimeoutException(timeout, e);
-            } catch (IOException e) {
-                if (retryPolicy.retryConnectionErrors() && attempt < retryPolicy.maxRetries()) {
-                    pause(backoff(retryPolicy, attempt, Optional.empty()));
-                    continue;
-                }
-
-                throw new TypeSafeConnectionException("Connection error: " + e.getMessage(), e);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new TypeSafeConnectionException("Request interrupted", e);
-            }
-
-            int status = httpResponse.statusCode();
-
-            if (status >= 200 && status < 300) {
-                return deserialize(httpResponse.body(), type);
-            }
-
-            if (retryPolicy.retriesStatus(status) && attempt < retryPolicy.maxRetries()) {
-                pause(backoff(retryPolicy, attempt, retryPolicy.respectRetryAfter() ? RetryAfter.parse(httpResponse.headers()) : Optional.empty()));
-                continue;
-            }
-
-            throw TypeSafeApiException.fromResponse(status, httpResponse.body(), httpResponse.headers());
-        }
-    }
-
-    /** A server-supplied delay within the cap wins; otherwise capped exponential backoff with jitter subtracted. */
-    private static Duration backoff(RetryPolicy retryPolicy, int attempt, Optional<Duration> retryAfter) {
-        if (retryAfter.isPresent() && retryAfter.get().compareTo(retryPolicy.maxRetryAfter()) <= 0) {
-            return retryAfter.get();
-        }
-
-        long exponential = Math.min(retryPolicy.backoffInitial().toMillis() * (1L << Math.min(attempt, 30)), retryPolicy.backoffMax().toMillis());
-        return Duration.ofMillis(Math.round(exponential * (1 - ThreadLocalRandom.current().nextDouble() * retryPolicy.backoffJitter())));
-    }
-
-    private static void pause(Duration delay) {
-        try {
-            Thread.sleep(delay.toMillis());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new TypeSafeConnectionException("Interrupted while waiting to retry", e);
         }
     }
 

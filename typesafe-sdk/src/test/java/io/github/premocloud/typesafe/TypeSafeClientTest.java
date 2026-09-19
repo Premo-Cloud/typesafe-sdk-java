@@ -11,8 +11,11 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -375,6 +378,114 @@ class TypeSafeClientTest {
         assertTrue(assertThrows(TypeSafeException.class, () -> TypeSafeClient.builder().apiKey(" ").build()).getMessage().contains("TYPESAFE_API_KEY"));
         assertThrows(IllegalArgumentException.class, () -> TypeSafeClient.builder().timeout(Duration.ZERO));
         assertEquals(RetryPolicy.DEFAULT, TypeSafeClient.builder().apiKey(API_KEY).build().retryPolicy());
+    }
+
+    @Test
+    void systemOneAsyncReturnsTypedAnswers() throws Exception {
+        server.reply(200, RESPONSE_JSON);
+
+        TypeSafeResponse response = client.systemOneAsync(spamRequest()).get(5, TimeUnit.SECONDS);
+
+        assertEquals("jev-1.13.0", response.model());
+        assertEquals(0.93, response.noul("is_phishing"));
+        assertEquals("PHISHING", response.choice("spam_category").choice());
+        assertEquals(1.7, response.score("urgency").score());
+    }
+
+    @Test
+    void systemOneAsyncFailsWithStatusSpecificException() {
+        server.reply(401, "{\"error\":\"invalid api key\"}", Map.of("x-typesafe-request-id", "req_123"));
+
+        ExecutionException failure = assertThrows(ExecutionException.class,
+                () -> client.systemOneAsync(spamRequest()).get(5, TimeUnit.SECONDS));
+
+        TypeSafeAuthenticationException exception = assertInstanceOf(TypeSafeAuthenticationException.class, failure.getCause());
+        assertEquals(401, exception.status());
+        assertEquals("401 invalid api key", exception.getMessage());
+        assertEquals("req_123", exception.requestId().orElseThrow());
+    }
+
+    @Test
+    void systemOneAsyncRetriesWithRetryCountHeader() throws Exception {
+        TypeSafeClient retrying = TypeSafeClient.builder().apiKey(API_KEY).baseUrl(server.baseUrl())
+                .retryPolicy(RetryPolicy.of(r -> r.maxRetries(2).backoffInitial(Duration.ofMillis(1)).backoffMax(Duration.ofMillis(2)))).build();
+        server.reply(500, "{\"error\":\"boom\"}");
+        server.reply(429, "{\"error\":\"slow\"}", Map.of("retry-after-ms", "5"));
+        server.reply(200, RESPONSE_JSON);
+
+        TypeSafeResponse response = retrying.systemOneAsync(spamRequest()).get(5, TimeUnit.SECONDS);
+
+        assertEquals(0.93, response.noul("is_phishing"));
+        assertEquals(3, server.recorded().size());
+        assertNull(server.recorded().get(0).headers().getFirst("X-TypeSafe-Retry-Count"));
+        assertEquals("1", server.recorded().get(1).headers().getFirst("X-TypeSafe-Retry-Count"));
+        assertEquals("2", server.recorded().get(2).headers().getFirst("X-TypeSafe-Retry-Count"));
+    }
+
+    @Test
+    void systemOneAsyncHonorsPerCallOptions() {
+        TypeSafeClient retrying = TypeSafeClient.builder().apiKey(API_KEY).baseUrl(server.baseUrl()).header("X-Team", "review")
+                .retryPolicy(RetryPolicy.of(r -> r.maxRetries(2).backoffInitial(Duration.ofMillis(1)))).build();
+        server.reply(500, "no retry please");
+
+        ExecutionException failure = assertThrows(ExecutionException.class, () -> retrying
+                .systemOneAsync(spamRequest(), RequestOptions.of(o -> o.maxRetries(0).header("X-Team", "spike").header("X-Trace", "t1")))
+                .get(5, TimeUnit.SECONDS));
+
+        assertInstanceOf(TypeSafeInternalServerException.class, failure.getCause());
+        assertEquals(1, server.recorded().size());
+        assertEquals("spike", server.recorded().get(0).headers().getFirst("X-Team"));
+        assertEquals("t1", server.recorded().get(0).headers().getFirst("X-Trace"));
+
+        server.replyAfter(1500, 200, RESPONSE_JSON);
+        ExecutionException timed = assertThrows(ExecutionException.class, () -> retrying
+                .systemOneAsync(spamRequest(), RequestOptions.of(o -> o.timeout(Duration.ofMillis(200)).maxRetries(0)))
+                .get(5, TimeUnit.SECONDS));
+
+        assertEquals(Duration.ofMillis(200), assertInstanceOf(TypeSafeTimeoutException.class, timed.getCause()).timeout());
+    }
+
+    @Test
+    void systemOneAsyncRejectsAResponseMissingAnAnswerForAQuestionThatWasAsked() {
+        server.reply(200, """
+                {"model": "jev-1.13.0", "answers": {"is_phishing": {"type": "noul", "noul": 0.93}},
+                 "usage": {"input_tokens": 1, "output_tokens": 1}}
+                """);
+
+        ExecutionException failure = assertThrows(ExecutionException.class,
+                () -> client.systemOneAsync(spamRequest()).get(5, TimeUnit.SECONDS));
+
+        TypeSafeException exception = assertInstanceOf(TypeSafeException.class, failure.getCause());
+        assertEquals(TypeSafeException.class, exception.getClass());
+        assertTrue(exception.getMessage().contains("spam_category"), exception.getMessage());
+    }
+
+    @Test
+    void systemOneAsyncThrowsRequestSetupErrorsSynchronously() {
+        assertThrows(IllegalStateException.class, () -> client.systemOneAsync(r -> r.noul("is_phishing", n -> n.instructions("Yes?"))));
+        assertThrows(IllegalStateException.class, () -> client.systemOneAsync(Map.of("email", "text"), Map.of()));
+    }
+
+    @Test
+    void modelsListAsyncReturnsModels() throws Exception {
+        server.reply(200, "{\"models\":[{\"name\":\"jev-1.13.0\",\"description\":\"Jev\",\"release_date\":\"2026-09-01\",\"extra\":1}]}");
+
+        List<ModelCard> models = client.models().listAsync().get(5, TimeUnit.SECONDS);
+
+        assertEquals("GET", server.recorded().get(0).method());
+        assertEquals("/v1/models", server.recorded().get(0).path());
+        assertEquals(List.of(new ModelCard("jev-1.13.0", "Jev", "2026-09-01")), models);
+    }
+
+    @Test
+    void modelsListAsyncHonorsPerCallHeaders() throws Exception {
+        client = TypeSafeClient.builder().apiKey(API_KEY).baseUrl(server.baseUrl()).header("X-Team", "review").retryPolicy(RetryPolicy.none()).build();
+        server.reply(200, "{\"models\":[]}");
+
+        assertEquals(List.of(), client.models().listAsync(RequestOptions.of(o -> o.header("X-Trace", "t2"))).get(5, TimeUnit.SECONDS));
+
+        assertEquals("t2", server.recorded().get(0).headers().getFirst("X-Trace"));
+        assertEquals("review", server.recorded().get(0).headers().getFirst("X-Team"));
     }
 
     private static TypeSafeRequest spamRequest() {

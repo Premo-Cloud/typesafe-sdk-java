@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Async API: `systemOneAsync` mirroring every `systemOne` overload and `models().listAsync()` return `CompletableFuture`s driven by `HttpClient.sendAsync`, so retries back off without holding a thread, honoring the same per-call `RequestOptions` and failing with the same `TypeSafeException` subclasses as the blocking calls (#4).
+
 ## 0.2.0 - 2026-09-19
 
 - `RequestOptions.maxRetries(n)` now applies the retry count on top of the client's retry policy, or the call's own policy when one is set, instead of replacing the policy with `RetryPolicy.DEFAULT` and losing the client's statuses and backoff (#2).
