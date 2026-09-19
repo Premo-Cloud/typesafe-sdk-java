@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-09-19
 
+- `RequestOptions.maxRetries(n)` now applies the retry count on top of the client's retry policy, or the call's own policy when one is set, instead of replacing the policy with `RetryPolicy.DEFAULT` and losing the client's statuses and backoff (#2).
 - A response whose answer is missing a required field (`noul`, `choice`, `score`, `probabilities`, `confidence`), or has it as `null`, now fails `systemOne` with a `TypeSafeException` naming the question, instead of reading as `0.0` or `null` (#1).
 - A response that omits an answer for a question that was asked now fails `systemOne` with a `TypeSafeException` naming the unanswered questions, instead of surfacing later as an `IllegalArgumentException` when that key is read (#1).
 - A response answering a question with a different type than was asked now fails `systemOne` with a `TypeSafeException` naming that question (#1).

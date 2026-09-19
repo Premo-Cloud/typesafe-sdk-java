@@ -10,7 +10,7 @@ Compiled against Spring Boot 3.1 and Java 17. Works with any Spring Boot 3.x; Sp
 Gradle:
 
 ```kotlin
-implementation("io.github.premo-cloud:typesafe-sdk-spring-boot-starter:0.1.1")
+implementation("io.github.premo-cloud:typesafe-sdk-spring-boot-starter:0.2.0")
 ```
 
 Maven:
@@ -19,7 +19,7 @@ Maven:
 <dependency>
   <groupId>io.github.premo-cloud</groupId>
   <artifactId>typesafe-sdk-spring-boot-starter</artifactId>
-  <version>0.1.1</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 
