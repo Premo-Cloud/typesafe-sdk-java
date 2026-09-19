@@ -137,6 +137,19 @@ client.systemOne(request, RequestOptions.of(o -> o.timeout(Duration.ofSeconds(30
 client.models().list(RequestOptions.of(o -> o.header("X-Trace", traceId)));
 ```
 
+### Async
+
+Every entry point has a `CompletableFuture` variant: `systemOneAsync` for each `systemOne` overload and
+`models().listAsync()`. They are driven by `HttpClient.sendAsync`, so backoff between retries never holds a
+thread. They honor the same per-call `RequestOptions` and retry policy, and complete the future exceptionally
+with the same `TypeSafeException` subclass the blocking call would throw.
+
+```java
+client.systemOneAsync(r -> r.state(email).noul("is_phishing", n -> n.instructions("Is `email` phishing?")))
+        .thenAccept(response -> route(response.noul("is_phishing")))
+        .exceptionally(error -> { log.warn("phishing check failed", error); return null; });
+```
+
 ### Models
 
 ```java
