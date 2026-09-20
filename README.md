@@ -8,7 +8,7 @@ TypeSafe AI. It follows the conventions of the official [Python](https://github.
 [JavaScript](https://github.com/typesafe-ai/typesafe-sdk-js) SDKs so the three read alike. TypeSafe is a trademark of
 its owner; the name is used here only to describe what the library connects to.
 
-Requires Java 17 or newer. Depends on Jackson and slf4j-api, plus JSpecify's nullness annotations.
+Requires Java 17 or newer.
 
 ## Install
 
