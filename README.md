@@ -8,7 +8,7 @@ TypeSafe AI. It follows the conventions of the official [Python](https://github.
 [JavaScript](https://github.com/typesafe-ai/typesafe-sdk-js) SDKs so the three read alike. TypeSafe is a trademark of
 its owner; the name is used here only to describe what the library connects to.
 
-Requires Java 17 or newer. Depends only on Jackson.
+Requires Java 17 or newer. Depends on Jackson and slf4j-api, plus JSpecify's nullness annotations.
 
 ## Install
 
@@ -172,6 +172,35 @@ TypeSafeClient client = TypeSafeClient.builder()
         .objectMapper(myObjectMapper)          // optional: custom serializers for your state types
         .build();
 ```
+
+## Logging
+
+The client logs through slf4j on the `io.github.premocloud.typesafe` logger. Set its level the way you set any
+library's; there is no environment variable, because slf4j has no library-side level setting and configuring the
+logging environment is the application's job.
+
+| Level | What you get |
+| --- | --- |
+| `INFO` | one line per request with its status and how long it took, plus a line per retry and per connection failure |
+| `DEBUG` | the above, plus the wire in both directions: method, url, headers, body |
+| `WARN` and above | nothing; failures are thrown, not logged |
+
+```xml
+<logger name="io.github.premocloud.typesafe" level="DEBUG"/>
+```
+
+```properties
+logging.level.io.github.premocloud.typesafe=DEBUG
+```
+
+```
+DEBUG io.github.premocloud.typesafe - req-1 -> POST https://api.typesafe.ai/v1/systemone headers={Authorization=***, ...} body={"state":...}
+INFO  io.github.premocloud.typesafe - req-1 <- 200 in 214ms
+DEBUG io.github.premocloud.typesafe - req-1 <- 200 headers={x-typesafe-request-id=req_01a0..., ...} body={"model":"jev-1.13.0",...}
+```
+
+Credential headers are masked, including any of your own containing `token` or `secret`. **Bodies are not masked**, so
+`DEBUG` puts the state you are classifying into the log.
 
 ## Spring Boot
 
