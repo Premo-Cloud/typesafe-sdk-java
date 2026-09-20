@@ -44,12 +44,16 @@ class LoggingTest {
         appender.start();
         logger.addAppender(appender);
         logger.setLevel(Level.DEBUG);
+        // Capture only: without this the events also reach logback's default console appender and
+        // every test run prints the request and response bodies.
+        logger.setAdditive(false);
     }
 
     @AfterEach
     void tearDown() {
         logger.detachAppender(appender);
         logger.setLevel(null);
+        logger.setAdditive(true);
         server.close();
     }
 
