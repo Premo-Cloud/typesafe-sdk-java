@@ -65,7 +65,7 @@ class LoggingTest {
 
         List<String> debug = messagesAt(Level.DEBUG);
         assertEquals(1, debug.size(), debug.toString());
-        assertTrue(debug.get(0).matches(".*<- 200 in \\d+ms.*"), debug.get(0));
+        assertTrue(debug.get(0).matches(".*<- 200 in \\d+ms \\(request .+\\).*"), debug.get(0));
     }
 
     @Test

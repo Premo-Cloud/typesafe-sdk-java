@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
 
 import java.io.IOException;
 import java.net.URI;
@@ -57,9 +58,11 @@ public final class TypeSafeClient {
     private static final String SDK_NAME = "typesafe-sdk";
     private static final String VERSION = Objects.requireNonNullElse(TypeSafeClient.class.getPackage().getImplementationVersion(), "dev");
 
+    private static final Logger LOG = Logging.LOG;
+    private static final AtomicLong REQUESTS = new AtomicLong();
+
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private static final AtomicLong REQUESTS = new AtomicLong();
     private final String apiKey;
     private final String baseUrl;
     private final String defaultModel;
@@ -241,7 +244,7 @@ public final class TypeSafeClient {
                     Throwable cause = unwrap(error);
 
                     if (cause instanceof HttpTimeoutException httpTimeout) {
-                        Logging.request("{} timed out after {}ms", call.tag(), elapsedMs(startedNanos));
+                        LOG.debug("{} timed out after {}ms", call.tag(), elapsedMs(startedNanos));
 
                         if (retryPolicy.retryTimeouts() && attempt < retryPolicy.maxRetries()) {
                             return retryAsync(backoff(retryPolicy, attempt, Optional.empty()), template, type, timeout, retryPolicy, attempt + 1, call);
@@ -251,7 +254,7 @@ public final class TypeSafeClient {
                     }
 
                     if (cause instanceof IOException ioException) {
-                        Logging.request("{} <- {} after {}ms", call.tag(), ioException.getClass().getSimpleName(), elapsedMs(startedNanos));
+                        LOG.debug("{} <- {} after {}ms", call.tag(), ioException.getClass().getSimpleName(), elapsedMs(startedNanos));
 
                         if (retryPolicy.retryConnectionErrors() && attempt < retryPolicy.maxRetries()) {
                             return retryAsync(backoff(retryPolicy, attempt, Optional.empty()), template, type, timeout, retryPolicy, attempt + 1, call);
@@ -264,7 +267,8 @@ public final class TypeSafeClient {
                 }
 
                 int status = response.statusCode();
-                Logging.request("{} <- {} in {}ms", call.tag(), status, elapsedMs(startedNanos));
+                LOG.debug("{} <- {} in {}ms (request {})", call.tag(), status, elapsedMs(startedNanos),
+                        response.headers().firstValue(TypeSafeApiException.REQUEST_ID_HEADER).orElse("-"));
 
                 if (Logging.wireEnabled()) {
                     Logging.wire(call.tag(), "<-", String.valueOf(status), response.headers(), response.body());
@@ -276,7 +280,7 @@ public final class TypeSafeClient {
 
                 if (retryPolicy.retriesStatus(status) && attempt < retryPolicy.maxRetries()) {
                     Duration delay = backoff(retryPolicy, attempt, retryPolicy.respectRetryAfter() ? RetryAfter.parse(response.headers()) : Optional.empty());
-                    Logging.request("{} retrying in {}ms (retry {}/{}) after {}", call.tag(), delay.toMillis(),
+                    LOG.debug("{} retrying in {}ms (retry {}/{}) after {}", call.tag(), delay.toMillis(),
                             attempt + 1, retryPolicy.maxRetries(), status);
 
                     return retryAsync(delay, template, type, timeout, retryPolicy, attempt + 1, call);

@@ -20,4 +20,3 @@ mavenPublishing {
         description.set(project.description)
     }
 }
-

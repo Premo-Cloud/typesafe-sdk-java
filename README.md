@@ -195,7 +195,7 @@ logging.level.io.github.premocloud.typesafe=DEBUG
 
 ```
 TRACE io.github.premocloud.typesafe - req-1 -> POST https://api.typesafe.ai/v1/systemone headers={Authorization=***, ...} body={"state":...}
-DEBUG io.github.premocloud.typesafe - req-1 <- 200 in 214ms
+DEBUG io.github.premocloud.typesafe - req-1 <- 200 in 214ms (request req_01a0...)
 TRACE io.github.premocloud.typesafe - req-1 <- 200 headers={x-typesafe-request-id=req_01a0..., ...} body={"model":"jev-1.13.0",...}
 ```
 
