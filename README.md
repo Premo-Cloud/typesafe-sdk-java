@@ -181,9 +181,9 @@ logging environment is the application's job.
 
 | Level | What you get |
 | --- | --- |
-| `INFO` | one line per request with its status and how long it took, plus a line per retry and per connection failure |
-| `DEBUG` | the above, plus the wire in both directions: method, url, headers, body |
-| `WARN` and above | nothing; failures are thrown, not logged |
+| `DEBUG` | one line per request with its status and how long it took, plus a line per retry and per connection failure |
+| `TRACE` | the above, plus the wire in both directions: method, url, headers, body |
+| `INFO` and above | nothing, so a stock application sees none of this; failures are thrown, not logged |
 
 ```xml
 <logger name="io.github.premocloud.typesafe" level="DEBUG"/>
@@ -194,13 +194,13 @@ logging.level.io.github.premocloud.typesafe=DEBUG
 ```
 
 ```
-DEBUG io.github.premocloud.typesafe - req-1 -> POST https://api.typesafe.ai/v1/systemone headers={Authorization=***, ...} body={"state":...}
-INFO  io.github.premocloud.typesafe - req-1 <- 200 in 214ms
-DEBUG io.github.premocloud.typesafe - req-1 <- 200 headers={x-typesafe-request-id=req_01a0..., ...} body={"model":"jev-1.13.0",...}
+TRACE io.github.premocloud.typesafe - req-1 -> POST https://api.typesafe.ai/v1/systemone headers={Authorization=***, ...} body={"state":...}
+DEBUG io.github.premocloud.typesafe - req-1 <- 200 in 214ms
+TRACE io.github.premocloud.typesafe - req-1 <- 200 headers={x-typesafe-request-id=req_01a0..., ...} body={"model":"jev-1.13.0",...}
 ```
 
 Credential headers are masked, including any of your own containing `token` or `secret`. **Bodies are not masked**, so
-`DEBUG` puts the state you are classifying into the log.
+`TRACE` puts the state you are classifying into the log.
 
 ## Spring Boot
 

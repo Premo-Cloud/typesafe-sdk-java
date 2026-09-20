@@ -241,7 +241,7 @@ public final class TypeSafeClient {
                     Throwable cause = unwrap(error);
 
                     if (cause instanceof HttpTimeoutException httpTimeout) {
-                        Logging.info("{} timed out after {}ms", call.tag(), elapsedMs(startedNanos));
+                        Logging.request("{} timed out after {}ms", call.tag(), elapsedMs(startedNanos));
 
                         if (retryPolicy.retryTimeouts() && attempt < retryPolicy.maxRetries()) {
                             return retryAsync(backoff(retryPolicy, attempt, Optional.empty()), template, type, timeout, retryPolicy, attempt + 1, call);
@@ -251,7 +251,7 @@ public final class TypeSafeClient {
                     }
 
                     if (cause instanceof IOException ioException) {
-                        Logging.info("{} <- {} after {}ms", call.tag(), ioException.getClass().getSimpleName(), elapsedMs(startedNanos));
+                        Logging.request("{} <- {} after {}ms", call.tag(), ioException.getClass().getSimpleName(), elapsedMs(startedNanos));
 
                         if (retryPolicy.retryConnectionErrors() && attempt < retryPolicy.maxRetries()) {
                             return retryAsync(backoff(retryPolicy, attempt, Optional.empty()), template, type, timeout, retryPolicy, attempt + 1, call);
@@ -264,7 +264,7 @@ public final class TypeSafeClient {
                 }
 
                 int status = response.statusCode();
-                Logging.info("{} <- {} in {}ms", call.tag(), status, elapsedMs(startedNanos));
+                Logging.request("{} <- {} in {}ms", call.tag(), status, elapsedMs(startedNanos));
 
                 if (Logging.wireEnabled()) {
                     Logging.wire(call.tag(), "<-", String.valueOf(status), response.headers(), response.body());
@@ -276,7 +276,7 @@ public final class TypeSafeClient {
 
                 if (retryPolicy.retriesStatus(status) && attempt < retryPolicy.maxRetries()) {
                     Duration delay = backoff(retryPolicy, attempt, retryPolicy.respectRetryAfter() ? RetryAfter.parse(response.headers()) : Optional.empty());
-                    Logging.info("{} retrying in {}ms (retry {}/{}) after {}", call.tag(), delay.toMillis(),
+                    Logging.request("{} retrying in {}ms (retry {}/{}) after {}", call.tag(), delay.toMillis(),
                             attempt + 1, retryPolicy.maxRetries(), status);
 
                     return retryAsync(delay, template, type, timeout, retryPolicy, attempt + 1, call);

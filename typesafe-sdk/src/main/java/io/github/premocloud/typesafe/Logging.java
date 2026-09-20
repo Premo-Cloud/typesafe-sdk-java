@@ -36,13 +36,13 @@ final class Logging {
     private Logging() {
     }
 
-    static void info(String format, Object... arguments) {
-        LOG.info(format, arguments);
+    static void request(String format, Object... arguments) {
+        LOG.debug(format, arguments);
     }
 
-    /** Guards the wire calls, so a redacted header string is never built when DEBUG is off. */
+    /** Guards the wire calls, so a redacted header string is never built when TRACE is off. */
     static boolean wireEnabled() {
-        return LOG.isDebugEnabled();
+        return LOG.isTraceEnabled();
     }
 
     /**
@@ -51,7 +51,7 @@ final class Logging {
      * @param arrow {@code ->} for what was sent, {@code <-} for what came back
      */
     static void wire(String tag, String arrow, String summary, HttpHeaders headers, @Nullable String body) {
-        LOG.debug("{} {} {} headers={} body={}", tag, arrow, summary, redact(headers), body == null ? "" : body);
+        LOG.trace("{} {} {} headers={} body={}", tag, arrow, summary, redact(headers), body == null ? "" : body);
     }
 
     /**

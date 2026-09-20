@@ -43,7 +43,7 @@ class LoggingTest {
         appender.setContext(context);
         appender.start();
         logger.addAppender(appender);
-        logger.setLevel(Level.DEBUG);
+        logger.setLevel(Level.TRACE);
         // Capture only: without this the events also reach logback's default console appender and
         // every test run prints the request and response bodies.
         logger.setAdditive(false);
@@ -58,27 +58,27 @@ class LoggingTest {
     }
 
     @Test
-    void logsOneInfoLinePerRequestWithStatusAndElapsed() {
-        server.reply(200, RESPONSE_JSON);
-
-        client().systemOne("state", Map.of("q", Noul.of("Yes?")));
-
-        List<String> info = messagesAt(Level.INFO);
-        assertEquals(1, info.size(), info.toString());
-        assertTrue(info.get(0).matches(".*<- 200 in \\d+ms.*"), info.get(0));
-    }
-
-    @Test
-    void logsTheWireInBothDirectionsAtDebug() {
+    void logsOneDebugLinePerRequestWithStatusAndElapsed() {
         server.reply(200, RESPONSE_JSON);
 
         client().systemOne("state", Map.of("q", Noul.of("Yes?")));
 
         List<String> debug = messagesAt(Level.DEBUG);
-        assertEquals(2, debug.size(), debug.toString());
-        assertTrue(debug.get(0).contains("-> POST"), debug.get(0));
-        assertTrue(debug.get(1).contains("<-"), debug.get(1));
-        assertTrue(debug.get(1).contains("jev-1.13.0"), "response body is logged: " + debug.get(1));
+        assertEquals(1, debug.size(), debug.toString());
+        assertTrue(debug.get(0).matches(".*<- 200 in \\d+ms.*"), debug.get(0));
+    }
+
+    @Test
+    void logsTheWireInBothDirectionsAtTrace() {
+        server.reply(200, RESPONSE_JSON);
+
+        client().systemOne("state", Map.of("q", Noul.of("Yes?")));
+
+        List<String> trace = messagesAt(Level.TRACE);
+        assertEquals(2, trace.size(), trace.toString());
+        assertTrue(trace.get(0).contains("-> POST"), trace.get(0));
+        assertTrue(trace.get(1).contains("<-"), trace.get(1));
+        assertTrue(trace.get(1).contains("jev-1.13.0"), "response body is logged: " + trace.get(1));
     }
 
     @Test
@@ -93,19 +93,20 @@ class LoggingTest {
     }
 
     @Test
-    void logsARetryLineAtInfo() {
+    void logsARetryLineAtDebug() {
         server.reply(429, "{}", Map.of("retry-after-ms", "1"));
         server.reply(200, RESPONSE_JSON);
 
         client().systemOne("state", Map.of("q", Noul.of("Yes?")));
 
-        assertTrue(messagesAt(Level.INFO).stream().anyMatch(m -> m.contains("retrying in")),
-                messagesAt(Level.INFO).toString());
+        assertTrue(messagesAt(Level.DEBUG).stream().anyMatch(m -> m.contains("retrying in")),
+                messagesAt(Level.DEBUG).toString());
     }
 
     @Test
-    void logsNothingWhenTheLevelIsAboveInfo() {
-        logger.setLevel(Level.WARN);
+    void logsNothingAtTheDefaultSpringBootLevel() {
+        // Java's default root level is INFO, so a stock application must see nothing from this client.
+        logger.setLevel(Level.INFO);
         server.reply(200, RESPONSE_JSON);
 
         client().systemOne("state", Map.of("q", Noul.of("Yes?")));
