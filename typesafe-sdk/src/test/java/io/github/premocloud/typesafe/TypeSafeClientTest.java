@@ -165,6 +165,14 @@ class TypeSafeClientTest {
         server.reply(400, "");
         assertEquals("400 status code (no body)", assertThrows(TypeSafeBadRequestException.class, () -> client.systemOne(spamRequest())).getMessage());
 
+        server.reply(402, "{\"error\":\"out of credits\"}");
+        assertEquals("402 out of credits",
+                assertThrows(TypeSafePaymentRequiredException.class, () -> client.systemOne(spamRequest())).getMessage());
+
+        server.reply(413, "{\"error\":\"payload too large\"}");
+        assertEquals("413 payload too large",
+                assertThrows(TypeSafePayloadTooLargeException.class, () -> client.systemOne(spamRequest())).getMessage());
+
         server.reply(503, "upstream down");
         assertEquals("503 upstream down", assertThrows(TypeSafeInternalServerException.class, () -> client.systemOne(spamRequest())).getMessage());
 
