@@ -26,7 +26,6 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 /**
@@ -59,7 +58,6 @@ public final class TypeSafeClient {
     private static final String VERSION = Objects.requireNonNullElse(TypeSafeClient.class.getPackage().getImplementationVersion(), "dev");
 
     private static final Logger LOG = Logging.LOG;
-    private static final AtomicLong REQUESTS = new AtomicLong();
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -222,7 +220,7 @@ public final class TypeSafeClient {
         headers.forEach(template::header);
 
         return attemptAsync(template, type, timeout, retryPolicy, 0,
-                new Call("req-" + REQUESTS.incrementAndGet(), requestBody));
+                new Call(Logging.tag(), requestBody));
     }
 
     /** One attempt, its retry decision, and its exception mapping: the path both blocking and async calls share. */

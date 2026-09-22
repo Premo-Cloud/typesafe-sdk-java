@@ -8,6 +8,7 @@ import java.net.http.HttpHeaders;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Collectors;
 
 /**
@@ -34,6 +35,15 @@ final class Logging {
             "authorization", "proxy-authorization", "api-key", "x-api-key", "cookie", "set-cookie");
 
     private Logging() {
+    }
+
+    /**
+     * A short opaque tag for one logical call, shared by every attempt it makes, so the lines of
+     * interleaved async calls can be told apart. Random rather than counted: no shared state, and no
+     * collisions across restarts or replicas in an aggregated log.
+     */
+    static String tag() {
+        return String.format("req-%06x", ThreadLocalRandom.current().nextInt(1 << 24));
     }
 
     /** Guards the wire calls, so a redacted header string is never built when TRACE is off. */

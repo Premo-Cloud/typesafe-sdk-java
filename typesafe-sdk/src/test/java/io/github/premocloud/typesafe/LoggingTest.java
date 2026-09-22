@@ -16,6 +16,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** What the client logs, at which level, and what it never puts in a log line. */
@@ -112,6 +113,27 @@ class LoggingTest {
         client().systemOne("state", Map.of("q", Noul.of("Yes?")));
 
         assertEquals(List.of(), messagesAt(null));
+    }
+
+    @Test
+    void tagsEachCallWithAShortRandomIdSharedByItsAttempts() {
+        server.reply(503, "{}", Map.of("retry-after-ms", "1"));
+        server.reply(200, RESPONSE_JSON);
+        server.reply(200, RESPONSE_JSON);
+
+        TypeSafeClient client = client();
+        client.systemOne("state", Map.of("q", Noul.of("Yes?")));
+        client.systemOne("state", Map.of("q", Noul.of("Yes?")));
+
+        List<String> debug = messagesAt(Level.DEBUG);
+        List<String> tags = debug.stream().map(m -> m.substring(0, m.indexOf(' '))).toList();
+        assertTrue(tags.stream().allMatch(t -> t.matches("req-[0-9a-f]{6}")), tags.toString());
+
+        // The first call is three lines (503 summary, retry, 200 summary) under one tag; the second call is one line under another.
+        assertEquals(4, debug.size(), debug.toString());
+        assertEquals(tags.get(0), tags.get(1), tags.toString());
+        assertEquals(tags.get(0), tags.get(2), tags.toString());
+        assertNotEquals(tags.get(0), tags.get(3), tags.toString());
     }
 
     private TypeSafeClient client() {
