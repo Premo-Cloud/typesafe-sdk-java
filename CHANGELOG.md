@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A response missing its `usage` block, or a `usage` missing `input_tokens` or `output_tokens`, now fails `systemOne` with a `TypeSafeException` naming the field, instead of reading as `null` or `0` (#12).
 - `ScoreAnswer.legend()` is now `Map<String, Object>`, since levels are sent as any JSON value and echoed back as sent. A `Score` with an object or array level previously failed the whole response, including its other answers and usage, with `Cannot deserialize value of type java.lang.String` (#11).
 
 ## 0.4.0 - 2026-09-22
