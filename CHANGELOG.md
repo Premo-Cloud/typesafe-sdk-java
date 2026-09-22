@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-09-22
 
-- Typed choices: `Choice<E>` and `ChoiceAnswer<E>` carry the label type. `Choice.of(instructions, Dept.class)`, `Choice.builder(Dept.class)`, and `TypeSafeRequest.Builder.choice(key, Dept.class, …)` build a question from an enum's constants, and `response.choice(key, Dept.class)` reads the answer back with `choice()` as the enum and `probabilities()` keyed by it. String labels are unchanged: `Choice.of(…, String...)` infers `Choice<String>` and `response.choice(key)` returns `ChoiceAnswer<String>`. **Breaking:** `ChoiceAnswer` gained a type parameter, which changes the erased return type of `choice()`; code compiled against 0.4.0 or earlier must be recompiled, and a raw `ChoiceAnswer` needs `<String>` or `var` (#10).
-- A response missing its `usage` block, or a `usage` missing `input_tokens` or `output_tokens`, now fails `systemOne` with a `TypeSafeException` naming the field, instead of reading as `null` or `0` (#12).
-- `ScoreAnswer.legend()` is now `Map<String, Object>`, since levels are sent as any JSON value and echoed back as sent. A `Score` with an object or array level previously failed the whole response, including its other answers and usage, with `Cannot deserialize value of type java.lang.String` (#11).
+- Typed choices: `Choice<E>` and `ChoiceAnswer<E>` carry the label type. `Choice.of(instructions, Dept.class)`, `Choice.builder(Dept.class)`, and `TypeSafeRequest.Builder.choice(key, Dept.class, …)` build a question from an enum's constants, and `response.choice(key, Dept.class)` reads the answer back with `choice()` as the enum and `probabilities()` keyed by it. String labels are unchanged: `Choice.of(…, String...)` infers `Choice<String>` and `response.choice(key)` returns `ChoiceAnswer<String>`. **Breaking:** `ChoiceAnswer` gained a type parameter, which changes the erased return type of `choice()`; code compiled against 0.4.0 or earlier must be recompiled, and a raw `ChoiceAnswer` needs `<String>` or `var` (#10, #15).
+- A response missing its `usage` block, or a `usage` missing `input_tokens` or `output_tokens`, now fails `systemOne` with a `TypeSafeException` naming the field, instead of reading as `null` or `0` (#12, #14).
+- `ScoreAnswer.legend()` is now `Map<String, Object>`, since levels are sent as any JSON value and echoed back as sent. A `Score` with an object or array level previously failed the whole response, including its other answers and usage, with `Cannot deserialize value of type java.lang.String` (#11, #13).
 
 ## 0.4.0 - 2026-09-22
 
