@@ -85,7 +85,7 @@ class TypeSafeClientTest {
 
         assertEquals("jev-1.13.0", response.model());
         assertEquals(0.93, response.noul("is_phishing"));
-        ChoiceAnswer category = response.choice("spam_category");
+        ChoiceAnswer<String> category = response.choice("spam_category");
         assertEquals("PHISHING", category.choice());
         assertEquals(0.9, category.probabilities().get("PHISHING"));
         assertEquals(0.88, category.confidence());
@@ -308,6 +308,39 @@ class TypeSafeClientTest {
         TypeSafeException exception = assertThrows(TypeSafeException.class, () -> client.systemOne(spamRequest()));
 
         assertTrue(exception.getMessage().contains("noul"), exception.getMessage());
+    }
+
+    /** Declared in the opposite order to the response's probabilities, to show the typed map follows the enum. */
+    enum SpamCategory { MARKETING, PHISHING }
+
+    enum Urgency { LOW, HIGH }
+
+    @Test
+    void systemOneReadsAChoiceAnswerAsAnEnum() {
+        server.reply(200, RESPONSE_JSON);
+
+        TypeSafeResponse response = client.systemOne(spamRequest());
+
+        ChoiceAnswer<SpamCategory> category = response.choice("spam_category", SpamCategory.class);
+        assertEquals(SpamCategory.PHISHING, category.choice());
+        assertEquals(0.9, category.probabilities().get(SpamCategory.PHISHING));
+        assertEquals(0.1, category.probabilities().get(SpamCategory.MARKETING));
+        assertEquals(0.88, category.confidence());
+        assertEquals(List.of(SpamCategory.MARKETING, SpamCategory.PHISHING), List.copyOf(category.probabilities().keySet()));
+        assertEquals("PHISHING", response.choice("spam_category").choice(), "the String read is unchanged");
+        assertEquals("PHISHING", response.choices().get("spam_category").choice());
+    }
+
+    @Test
+    void systemOneRejectsAChoiceLabelThatIsNotAConstantOfTheEnum() {
+        server.reply(200, RESPONSE_JSON);
+        TypeSafeResponse response = client.systemOne(spamRequest());
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> response.choice("spam_category", Urgency.class));
+
+        assertTrue(exception.getMessage().contains("PHISHING"), exception.getMessage());
+        assertTrue(exception.getMessage().contains("[LOW, HIGH]"), exception.getMessage());
     }
 
     @Test

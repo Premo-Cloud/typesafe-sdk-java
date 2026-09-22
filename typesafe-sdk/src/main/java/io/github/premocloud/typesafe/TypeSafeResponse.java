@@ -26,8 +26,18 @@ public record TypeSafeResponse(String model, Map<String, TypeSafeAnswer> answers
         return answer(key, NoulAnswer.class).noul();
     }
 
-    public ChoiceAnswer choice(String key) {
+    /** @return the choice answer with its labels as Strings, as they came off the wire */
+    @SuppressWarnings("unchecked")
+    public ChoiceAnswer<String> choice(String key) {
         return answer(key, ChoiceAnswer.class);
+    }
+
+    /**
+     * @return the choice answer with its labels as constants of {@code labels}, for a question built from that enum
+     * @throws IllegalArgumentException if a label in the answer is not a constant of {@code labels}
+     */
+    public <E extends Enum<E>> ChoiceAnswer<E> choice(String key, Class<E> labels) {
+        return choice(key).as(labels);
     }
 
     public ScoreAnswer score(String key) {
@@ -38,8 +48,9 @@ public record TypeSafeResponse(String model, Map<String, TypeSafeAnswer> answers
         return answersOf(NoulAnswer.class);
     }
 
-    public Map<String, ChoiceAnswer> choices() {
-        return answersOf(ChoiceAnswer.class);
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Map<String, ChoiceAnswer<String>> choices() {
+        return (Map) answersOf(ChoiceAnswer.class);
     }
 
     public Map<String, ScoreAnswer> scores() {

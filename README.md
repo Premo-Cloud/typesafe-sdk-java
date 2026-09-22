@@ -76,7 +76,7 @@ TypeSafeResponse response = client.systemOne(r -> r
                 .level("Threatens loss or suspension within hours")));
 
 double phishing = response.noul("is_phishing");            // 0.0 to 1.0
-ChoiceAnswer category = response.choice("category");       // choice(), probabilities(), confidence()
+ChoiceAnswer<String> category = response.choice("category"); // choice(), probabilities(), confidence()
 ScoreAnswer urgency = response.score("urgency");           // score(), probabilities(), confidence(), legend()
 ```
 
@@ -91,11 +91,40 @@ at (`` `email.body` ``) rather than one long string. `state(key, value)` adds a 
 ### Questions
 
 - `Noul.of(instructions)` asks yes or no; `whenTrue` and `whenFalse` describe the outcomes.
-- `Choice.of(instructions, labels...)` picks one label; `option(label, description)` describes a label, `option(label)` leaves it undescribed.
+- `Choice.of(instructions, labels...)` picks one label; `option(label, description)` describes a label, `option(label)` leaves it undescribed. Labels can also be the constants of an enum; see below.
 - `Score.of(instructions, levels...)` places the state on an ordered rubric of at least two levels.
 
 Instructions are optional when the criteria say enough on their own. Any description can be a plain string or a
 `Criterion` with `what`, `notFor`, and `examples`. Prebuilt questions are plain records and can be shared across requests.
+
+### Typed choices
+
+When the labels of a `Choice` are the constants of an enum you already have, build the question from the enum and read
+the answer back as that enum. A misspelled label is then a compile error, the probabilities are keyed by the constants,
+and a `switch` over the answer is exhaustive. The wire form is unchanged: the label is the constant's name.
+
+```java
+enum Dept { BILLING, SHIPPING, SECURITY }
+
+Choice<Dept> dept = Choice.of("Which team should handle `email`?", Dept.class);      // one option per constant
+Choice<Dept> described = Choice.builder(Dept.class)
+        .instructions("Which team should handle `email`?")
+        .option(Dept.BILLING, "Invoices, refunds, payment methods")
+        .option(Dept.SECURITY, o -> o.what("Credential theft").notFor("Legitimate requests"))
+        .build();                                                                     // only the constants named
+
+TypeSafeResponse response = client.systemOne(Map.of("email", email), Map.of("dept", dept));
+
+ChoiceAnswer<Dept> answer = response.choice("dept", Dept.class);
+answer.choice();                            // Dept.SECURITY
+answer.probabilities().get(Dept.BILLING);   // 0.48
+switch (answer.choice()) {                  // exhaustive: a missing case is a compile error
+    case BILLING -> ...; case SHIPPING -> ...; case SECURITY -> ...;
+}
+```
+
+`response.choice("dept")` still returns the `String` form. Reading an answer as an enum that lacks one of its labels throws
+an `IllegalArgumentException` naming the label and the enum's constants.
 
 ### Criteria-driven questions
 

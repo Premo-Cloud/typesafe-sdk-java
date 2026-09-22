@@ -79,8 +79,15 @@ public record TypeSafeRequest(Object state, @Nullable String model, Map<String, 
             return question(key, Noul.of(configure));
         }
 
-        public Builder choice(String key, Consumer<Choice.Builder> configure) {
+        public Builder choice(String key, Consumer<Choice.Builder<String>> configure) {
             return question(key, Choice.of(configure));
+        }
+
+        /** A choice whose labels are constants of {@code labels}; add the ones to ask about with {@code option}. */
+        public <E extends Enum<E>> Builder choice(String key, Class<E> labels, Consumer<Choice.Builder<E>> configure) {
+            Choice.Builder<E> builder = Choice.builder(labels);
+            configure.accept(builder);
+            return question(key, builder.build());
         }
 
         public Builder score(String key, Consumer<Score.Builder> configure) {

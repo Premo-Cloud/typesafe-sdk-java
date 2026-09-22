@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -125,6 +126,35 @@ class TypeSafeRequestTest {
         assertEquals("Judge bulk vs genuine", json.at("/questions/is_spam/instructions/focus").asText());
         assertFalse(json.at("/questions/is_spam").has("criteria"));
         assertThrows(IllegalStateException.class, () -> TypeSafeRequest.builder().state("text").state("k", "v"));
+    }
+
+    enum Dept { BILLING, SHIPPING, SECURITY }
+
+    @Test
+    void enumChoicesUseTheConstantNamesAsLabelsAndKeepTheWireShape() throws Exception {
+        Choice<Dept> flat = Choice.of("Which team?", Dept.class);
+        Choice<Dept> described = Choice.builder(Dept.class).instructions("Which team?")
+                .option(Dept.BILLING, "Invoices and refunds").option(Dept.SECURITY).build();
+        TypeSafeRequest request = TypeSafeRequest.of(r -> r.state("text")
+                .choice("dept", Dept.class, c -> c.instructions("Which team?").option(Dept.SHIPPING, o -> o.what("Delivery"))));
+
+        assertEquals(List.of("BILLING", "SHIPPING", "SECURITY"), List.copyOf(flat.criteria().keySet()));
+        JsonNode flatJson = objectMapper.valueToTree(flat);
+        assertEquals(Set.of("type", "instructions", "criteria"), fieldNames(flatJson), "no enum metadata leaks onto the wire");
+        assertEquals(objectMapper.valueToTree(Choice.of("Which team?", "BILLING", "SHIPPING", "SECURITY")), flatJson);
+
+        JsonNode describedJson = objectMapper.valueToTree(described);
+        assertEquals("Invoices and refunds", describedJson.at("/criteria/BILLING").asText());
+        assertTrue(describedJson.at("/criteria/SECURITY").isNull());
+        assertFalse(describedJson.at("/criteria").has("SHIPPING"));
+
+        assertEquals("Delivery", objectMapper.valueToTree(request).at("/questions/dept/criteria/SHIPPING/what").asText());
+    }
+
+    private static Set<String> fieldNames(JsonNode node) {
+        Set<String> names = new java.util.HashSet<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
     }
 
     @Test
