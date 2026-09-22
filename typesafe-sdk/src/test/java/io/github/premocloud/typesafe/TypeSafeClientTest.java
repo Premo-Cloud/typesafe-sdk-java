@@ -335,6 +335,28 @@ class TypeSafeClientTest {
     }
 
     @Test
+    void systemOneReadsAScoreLegendWithObjectAndArrayLevels() {
+        // Levels are sent as any JSON value and echoed back as sent, so the legend holds whatever was asked (#11).
+        server.reply(200, """
+                {"model": "jev-1.13.0", "answers": {
+                   "is_phishing": {"type": "noul", "noul": 0.93},
+                   "spam_category": {"type": "choice", "choice": "PHISHING", "probabilities": {"PHISHING": 1.0}, "confidence": 1.0},
+                   "urgency": {"type": "score", "score": 1.0, "probabilities": {"0": 0.2, "1": 0.5, "2": 0.3}, "confidence": 0.5,
+                               "legend": {"0": "none", "1": {"what": "Threatens loss within hours", "examples": ["final notice"]}, "2": ["a", "b"]}}},
+                 "usage": {"input_tokens": 1, "output_tokens": 1}}
+                """);
+
+        TypeSafeResponse response = client.systemOne(spamRequest());
+
+        Map<String, Object> legend = response.score("urgency").legend();
+        assertEquals("none", legend.get("0"));
+        assertEquals(Map.of("what", "Threatens loss within hours", "examples", List.of("final notice")), legend.get("1"));
+        assertEquals(List.of("a", "b"), legend.get("2"));
+        assertEquals(0.93, response.noul("is_phishing"));
+        assertEquals(1, response.usage().inputTokens());
+    }
+
+    @Test
     void systemOneRejectsAResponseMissingAnAnswerForAQuestionThatWasAsked() {
         server.reply(200, """
                 {"model": "jev-1.13.0", "answers": {"is_phishing": {"type": "noul", "noul": 0.93}},

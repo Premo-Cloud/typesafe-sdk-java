@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `ScoreAnswer.legend()` is now `Map<String, Object>`, since levels are sent as any JSON value and echoed back as sent. A `Score` with an object or array level previously failed the whole response, including its other answers and usage, with `Cannot deserialize value of type java.lang.String` (#11).
+
 ## 0.4.0 - 2026-09-22
 
 - Logging through slf4j on the `io.github.premocloud.typesafe` logger: `DEBUG` for one line per request with status and elapsed, plus retries and connection failures; `TRACE` for the wire in both directions. Nothing at `INFO` or above. Credential headers are masked. Adds `org.slf4j:slf4j-api` (#6, #7).
