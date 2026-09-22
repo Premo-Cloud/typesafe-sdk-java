@@ -37,8 +37,10 @@ public class TypeSafeApiException extends TypeSafeException {
         return switch (status) {
             case 400 -> new TypeSafeBadRequestException(status, body, headers);
             case 401 -> new TypeSafeAuthenticationException(status, body, headers);
+            case 402 -> new TypeSafePaymentRequiredException(status, body, headers);
             case 403 -> new TypeSafePermissionDeniedException(status, body, headers);
             case 404 -> new TypeSafeNotFoundException(status, body, headers);
+            case 413 -> new TypeSafePayloadTooLargeException(status, body, headers);
             case 422 -> new TypeSafeUnprocessableEntityException(status, body, headers);
             case 429 -> new TypeSafeRateLimitException(status, body, headers);
             default -> status >= 500 ? new TypeSafeInternalServerException(status, body, headers) : new TypeSafeApiException(status, body, headers);

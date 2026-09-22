@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Logging through slf4j on the `io.github.premocloud.typesafe` logger: `DEBUG` for one line per request with status and elapsed, plus retries and connection failures; `TRACE` for the wire in both directions. Nothing at `INFO` or above. Credential headers are masked. Adds `org.slf4j:slf4j-api` (#6).
+- `TypeSafePaymentRequiredException` (402) and `TypeSafePayloadTooLargeException` (413) join the other status-specific exceptions; both statuses previously fell through to the generic `TypeSafeApiException` (#8).
 
 ## 0.3.0 - 2026-09-19
 
