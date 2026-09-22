@@ -384,6 +384,39 @@ class TypeSafeClientTest {
     }
 
     @Test
+    void systemOneRejectsAResponseMissingItsUsage() {
+        // Without this the response reads with usage() == null and the first caller to read a count gets an NPE (#12).
+        server.reply(200, """
+                {"model": "jev-1.13.0", "answers": {
+                   "is_phishing": {"type": "noul", "noul": 0.93},
+                   "spam_category": {"type": "choice", "choice": "PHISHING", "probabilities": {"PHISHING": 1.0}, "confidence": 1.0},
+                   "urgency": {"type": "score", "score": 1.0, "probabilities": {"1": 1.0}, "confidence": 1.0, "legend": {"1": "x"}}}}
+                """);
+
+        TypeSafeException exception = assertThrows(TypeSafeException.class, () -> client.systemOne(spamRequest()));
+
+        assertTrue(exception.getMessage().contains("usage"), exception.getMessage());
+    }
+
+    @Test
+    void systemOneRejectsUsageMissingACount() {
+        // A missing or null count previously read as 0, the same silent default 0.2.0 removed from the answers (#12).
+        for (String usage : List.of("{\"input_tokens\": 1}", "{\"input_tokens\": 1, \"output_tokens\": null}")) {
+            server.reply(200, """
+                    {"model": "jev-1.13.0", "answers": {
+                       "is_phishing": {"type": "noul", "noul": 0.93},
+                       "spam_category": {"type": "choice", "choice": "PHISHING", "probabilities": {"PHISHING": 1.0}, "confidence": 1.0},
+                       "urgency": {"type": "score", "score": 1.0, "probabilities": {"1": 1.0}, "confidence": 1.0, "legend": {"1": "x"}}},
+                     "usage": %s}
+                    """.formatted(usage));
+
+            TypeSafeException exception = assertThrows(TypeSafeException.class, () -> client.systemOne(spamRequest()), usage);
+
+            assertTrue(exception.getMessage().contains("output_tokens"), exception.getMessage());
+        }
+    }
+
+    @Test
     void systemOneRejectsUnreadableBody() {
         server.reply(200, "not json");
 

@@ -14,6 +14,13 @@ import java.util.Objects;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record TypeSafeResponse(String model, Map<String, TypeSafeAnswer> answers, TypeSafeUsage usage) {
 
+    /** A response without its usage block is malformed; reading it later as {@code null} would be the first sign. */
+    public TypeSafeResponse {
+        if (Objects.isNull(usage)) {
+            throw new IllegalArgumentException("response is missing 'usage'");
+        }
+    }
+
     /** @return probability that the yes/no question answered yes, 0 to 1 */
     public double noul(String key) {
         return answer(key, NoulAnswer.class).noul();
