@@ -17,7 +17,7 @@ Requires Java 17 or newer.
 Gradle:
 
 ```kotlin
-implementation("io.github.premo-cloud:typesafe-sdk:0.5.0")
+implementation("io.github.premo-cloud:typesafe-sdk:0.5.1")
 ```
 
 Maven:
@@ -26,7 +26,7 @@ Maven:
 <dependency>
   <groupId>io.github.premo-cloud</groupId>
   <artifactId>typesafe-sdk</artifactId>
-  <version>0.5.0</version>
+  <version>0.5.1</version>
 </dependency>
 ```
 

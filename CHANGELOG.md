@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 - 2026-09-23
+
+- The published POM description now names Jev: "Community Java SDK for Jev and the TypeSafe System One API" (#16).
+- Copyright in `LICENSE` is now held by "The authors of the Premo-Cloud/typesafe-sdk-java repository" (#16).
+
 ## 0.5.0 - 2026-09-22
 
 - Typed choices: `Choice<E>` and `ChoiceAnswer<E>` carry the label type. `Choice.of(instructions, Dept.class)`, `Choice.builder(Dept.class)`, and `TypeSafeRequest.Builder.choice(key, Dept.class, …)` build a question from an enum's constants, and `response.choice(key, Dept.class)` reads the answer back with `choice()` as the enum and `probabilities()` keyed by it. String labels are unchanged: `Choice.of(…, String...)` infers `Choice<String>` and `response.choice(key)` returns `ChoiceAnswer<String>`. **Breaking:** `ChoiceAnswer` gained a type parameter, which changes the erased return type of `choice()`; code compiled against 0.4.0 or earlier must be recompiled, and a raw `ChoiceAnswer` needs `<String>` or `var` (#10, #15).
