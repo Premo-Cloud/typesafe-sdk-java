@@ -1,4 +1,4 @@
-description = "Community Java client for the TypeSafe System One API"
+description = "Community Java SDK for Jev and the TypeSafe System One API"
 
 dependencies {
     api("com.fasterxml.jackson.core:jackson-databind:2.15.4")
