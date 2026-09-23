@@ -1,5 +1,8 @@
 # TypeSafe SDK for Java: a Jev client for the JVM
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Premo-Cloud/typesafe-sdk-java/ci.yml?branch=main&logo=github&label=CI)](https://github.com/Premo-Cloud/typesafe-sdk-java/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.premo-cloud/typesafe-sdk)](https://central.sonatype.com/artifact/io.github.premo-cloud/typesafe-sdk)
+
 A community Java SDK for Jev and the other [TypeSafe](https://typesafe.ai) System One models. Ask Jev small, typed
 questions over your application state and get typed answers with calibrated probabilities back, in one round trip, with
 no prompt parsing.
