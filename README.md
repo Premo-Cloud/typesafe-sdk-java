@@ -1,7 +1,9 @@
-# TypeSafe SDK for Java
+# TypeSafe SDK for Java: a Jev client for the JVM
 
-A community Java client for the [TypeSafe](https://typesafe.ai) System One API. Ask small, typed questions over your
-application state and get calibrated probabilities back, in one round trip, with no prompt parsing.
+A community Java SDK for Jev and the other [TypeSafe](https://typesafe.ai) System One models. Ask Jev small, typed
+questions over your application state and get typed answers with calibrated probabilities back, in one round trip, with
+no prompt parsing.
+Java 17+, a Spring Boot starter, and Jackson as the only dependency.
 
 This library is an independent, community-maintained project and is not affiliated with, endorsed by, or supported by
 TypeSafe AI. It follows the conventions of the official [Python](https://github.com/typesafe-ai/typesafe-sdk-python) and
@@ -258,4 +260,4 @@ Please keep the public API aligned with the official SDKs' conventions and add a
 
 ## License
 
-MIT, Copyright (c) 2026 Garret Premo. See [LICENSE](LICENSE).
+MIT, Copyright (c) 2026 The authors of the Premo-Cloud/typesafe-sdk-java repository. See [LICENSE](LICENSE).
