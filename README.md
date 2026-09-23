@@ -260,4 +260,4 @@ Please keep the public API aligned with the official SDKs' conventions and add a
 
 ## License
 
-MIT, Copyright (c) 2026 Garret Premo. See [LICENSE](LICENSE).
+MIT, Copyright (c) 2026 The authors of the Premo-Cloud/typesafe-sdk-java repository. See [LICENSE](LICENSE).
