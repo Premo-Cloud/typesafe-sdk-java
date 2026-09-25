@@ -50,17 +50,19 @@ precedence. IDEs offer completion for these keys from the generated configuratio
 @Service
 public class TicketTriage {
 
+    public enum Department { BILLING, TECHNICAL, OTHER }
+
+    private static final Ask<ChoiceAnswer<Department>> DEPARTMENT = Ask.choice("department", Department.class,
+            Choice.of("Which team should handle `ticket`?", Department.class));
+
     private final TypeSafeClient typeSafeClient;
 
     public TicketTriage(TypeSafeClient typeSafeClient) {
         this.typeSafeClient = typeSafeClient;
     }
 
-    public String department(String ticket) {
-        TypeSafeResponse response = typeSafeClient.systemOne(
-                Map.of("ticket", ticket),
-                Map.of("department", Choice.of("Which team should handle `ticket`?", "billing", "technical", "other")));
-        return response.choice("department").choice();
+    public Department department(String ticket) {
+        return typeSafeClient.systemOne(Map.of("ticket", ticket), DEPARTMENT).answer(DEPARTMENT).choice();
     }
 }
 ```
