@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Typed answer lookup: `Ask<A>` pairs a key, a question, and its answer type. `Ask.noul`, `Ask.choice`, and `Ask.score` declare one, returning the sealed subtypes `NoulAsk`, `ChoiceAsk<E>`, and `ScoreAsk`; `client.systemOne(state, URGENT, DEPT)`, `systemOneAsync`, `TypeSafeRequest.of(state, …)`, and `TypeSafeRequest.Builder.ask(…)` ask it; `response.answer(DEPT)` reads it back as `NoulAnswer`, `ChoiceAnswer<E>`, or `ScoreAnswer`. An enum choice ask rejects a label that is not a constant of its enum when it is created. A request rejects a second question under an asked key; questions added only by key still replace each other as before (#17).
+- `TypeSafeRequest.Builder.state(key, value)` starts an object state when no state is set yet, instead of throwing `IllegalStateException` (#17).
+
 ## 0.5.1 - 2026-09-23
 
 - The published POM description now names Jev: "Community Java SDK for Jev and the TypeSafe System One API" (#16).

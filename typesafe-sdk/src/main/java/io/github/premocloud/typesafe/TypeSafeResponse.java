@@ -9,7 +9,8 @@ import java.util.Objects;
 
 /**
  * Answers keyed by the question ids from the request. Read one answer with {@link #noul}, {@link #choice}, or
- * {@link #score}, or all answers of a kind with {@link #nouls()}, {@link #choices()}, or {@link #scores()}.
+ * {@link #score}, or through the {@link Ask} that asked it with {@link #answer(Ask)}, or all answers of a kind with
+ * {@link #nouls()}, {@link #choices()}, or {@link #scores()}.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record TypeSafeResponse(String model, Map<String, TypeSafeAnswer> answers, TypeSafeUsage usage) {
@@ -44,6 +45,14 @@ public record TypeSafeResponse(String model, Map<String, TypeSafeAnswer> answers
         return answer(key, ScoreAnswer.class);
     }
 
+    /**
+     * @return the answer to {@code ask}, typed by it: {@code Dept dept = response.answer(DEPT).choice()}
+     * @throws IllegalArgumentException as the keyed accessors do: no answer under its key, or an enum label not in its enum
+     */
+    public <A> A answer(Ask<A> ask) {
+        return ask.read(this);
+    }
+
     public Map<String, NoulAnswer> nouls() {
         return answersOf(NoulAnswer.class);
     }
@@ -57,7 +66,7 @@ public record TypeSafeResponse(String model, Map<String, TypeSafeAnswer> answers
         return answersOf(ScoreAnswer.class);
     }
 
-    private <T extends TypeSafeAnswer> T answer(String key, Class<T> expected) {
+    <T extends TypeSafeAnswer> T answer(String key, Class<T> expected) {
         TypeSafeAnswer answer = answers.get(key);
 
         if (Objects.isNull(answer)) {

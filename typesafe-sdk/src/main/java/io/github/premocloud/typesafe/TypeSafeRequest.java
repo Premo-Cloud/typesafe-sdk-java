@@ -4,9 +4,11 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Consumer;
 
 /**
@@ -33,6 +35,11 @@ public record TypeSafeRequest(Object state, @Nullable String model, Map<String, 
         return builder.build();
     }
 
+    /** {@code TypeSafeRequest.of(Map.of("email", email), URGENT, DEPT)}; read the answers back with the same asks. */
+    public static TypeSafeRequest of(Object state, Ask<?> first, Ask<?>... more) {
+        return builder().state(state).ask(first).ask(more).build();
+    }
+
     public static TypeSafeRequest of(Consumer<Builder> configure) {
         Builder builder = builder();
         configure.accept(builder);
@@ -51,15 +58,20 @@ public record TypeSafeRequest(Object state, @Nullable String model, Map<String, 
         private @Nullable Object state;
         private @Nullable String model;
         private final Map<String, TypeSafeQuestion> questions = new LinkedHashMap<>();
+        private final Set<String> askedKeys = new HashSet<>();
 
         public Builder state(Object state) {
             this.state = state;
             return this;
         }
 
-        /** Adds one named field to an object state. The state must already be a {@code Map}. */
+        /** Adds one named field to an object state, starting one if no state is set yet. A state already set must be a {@code Map}. */
         @SuppressWarnings("unchecked")
         public Builder state(String key, Object value) {
+            if (Objects.isNull(state)) {
+                state = new LinkedHashMap<String, Object>();
+            }
+
             if (!(state instanceof Map<?, ?>)) {
                 throw new IllegalStateException("state(key, value) needs an object state; call state(Map) first");
             }
@@ -94,7 +106,34 @@ public record TypeSafeRequest(Object state, @Nullable String model, Map<String, 
             return question(key, Score.of(configure));
         }
 
+        /**
+         * Adds each ask's question under its key.
+         *
+         * @throws IllegalArgumentException if the request already has a question under one of the keys
+         */
+        public Builder ask(Ask<?>... asks) {
+            for (Ask<?> ask : asks) {
+                if (questions.containsKey(ask.key())) {
+                    throw new IllegalArgumentException("The request already has a question '%s'".formatted(ask.key()));
+                }
+
+                questions.put(ask.key(), ask.question());
+                askedKeys.add(ask.key());
+            }
+
+            return this;
+        }
+
+        /**
+         * Adds a question, replacing any earlier question under the same key.
+         *
+         * @throws IllegalArgumentException if the key belongs to an {@link Ask}, whose answer would no longer match it
+         */
         public Builder question(String key, TypeSafeQuestion question) {
+            if (askedKeys.contains(key)) {
+                throw new IllegalArgumentException("Question '%s' was added with ask(...) and cannot be replaced".formatted(key));
+            }
+
             questions.put(key, question);
             return this;
         }
