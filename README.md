@@ -38,98 +38,120 @@ Spring Boot users can add `io.github.premo-cloud:typesafe-sdk-spring-boot-starte
 
 ## Use
 
-The shape mirrors the Python and JavaScript SDKs: a client, `systemOne(state, questions)`, and question types named
-`Noul`, `Choice`, and `Score` that take `(instructions, criteria)`.
+Declare each question once as an `Ask`: its key, the question, and the type its answer reads back as. Ask them over your
+state in one call, then read each answer back through the same `Ask`:
 
 ```java
+enum Category { MARKETING, PHISHING, NOT_SPAM }
+
+static final Ask<NoulAnswer> IS_PHISHING = Ask.noul("is_phishing", n -> n
+        .instructions("Does `email` attempt to trick the recipient into revealing credentials or payment details?")
+        .whenTrue(c -> c.what("Impersonates a trusted organization or demands urgent verification via a link")
+                .examples("Confirm your details within 24 hours to avoid suspension"))
+        .whenFalse("A legitimate request from a known counterparty"));
+
+static final Ask<ChoiceAnswer<Category>> CATEGORY = Ask.choice("category", Category.class, c -> c
+        .instructions("Which category best describes `email`?")
+        .option(Category.MARKETING, "Promotional content sent to a list")
+        .option(Category.PHISHING, o -> o.what("Credential theft or impersonation").notFor("Legitimate requests to confirm a payment"))
+        .option(Category.NOT_SPAM));                                   // an undescribed label
+
+static final Ask<ScoreAnswer> URGENCY = Ask.score("urgency", s -> s
+        .instructions("How hard does `email.body` press the recipient to act immediately?")
+        .level("No time pressure")
+        .level("Mentions a deadline")
+        .level("Threatens loss or suspension within hours"));
+
 TypeSafeClient client = TypeSafeClient.fromEnvironment();   // reads TYPESAFE_API_KEY
 
 TypeSafeResponse response = client.systemOne(
-        Map.of("document", "I was charged twice. Please fix this ASAP."),
-        Map.of("category", Choice.of("What is this ticket about?", "billing", "technical", "other"),
-               "urgent", Noul.of("Does `document` convey urgency?")));
-
-response.choices().get("category").choice();   // "billing"
-response.noul("urgent");                       // 0.0 to 1.0
-```
-
-When a question needs structure, every type also takes a configurer, so nested requests read top to bottom with no
-`build()` calls, in the style of the Elasticsearch and AWS Java clients:
-
-```java
-TypeSafeResponse response = client.systemOne(r -> r
-        .state(Map.of(
-                "email", Map.of(
+        Map.of("email", Map.of(
                         "from", "alerts@secure-notice.example",
                         "subject", "Action required: confirm your account details",
                         "body", "Your access will be suspended unless you confirm your details at the link below within 24 hours."),
-                "context", Map.of("recipient_domain", "example.com")))
-        .noul("is_phishing", n -> n
-                .instructions("Does `email` attempt to trick the recipient into revealing credentials or payment details?")
-                .whenTrue(c -> c.what("Impersonates a trusted organization or demands urgent verification via a link")
-                        .examples("Confirm your details within 24 hours to avoid suspension"))
-                .whenFalse("A legitimate request from a known counterparty"))
-        .choice("category", c -> c
-                .instructions("Which category best describes `email`?")
-                .option("MARKETING", "Promotional content sent to a list")
-                .option("PHISHING", o -> o.what("Credential theft or impersonation").notFor("Legitimate requests to confirm a payment"))
-                .option("NOT_SPAM"))                                   // an undescribed label
-        .score("urgency", s -> s
-                .instructions("How hard does `email.body` press the recipient to act immediately?")
-                .level("No time pressure")
-                .level("Mentions a deadline")
-                .level("Threatens loss or suspension within hours")));
+                "context", Map.of("recipient_domain", "example.com")),
+        IS_PHISHING, CATEGORY, URGENCY);
 
-double phishing = response.noul("is_phishing");            // 0.0 to 1.0
-ChoiceAnswer<String> category = response.choice("category"); // choice(), probabilities(), confidence()
-ScoreAnswer urgency = response.score("urgency");           // score(), probabilities(), confidence(), legend()
+double phishing = response.answer(IS_PHISHING).noul();   // 0.0 to 1.0
+Category category = response.answer(CATEGORY).choice();  // Category.PHISHING
+ScoreAnswer urgency = response.answer(URGENCY);          // score(), probabilities(), confidence(), legend()
 ```
 
-Everything in one request runs in parallel on the server and shares one round trip. Only start a second request when an
-answer is needed to build the next state.
+Every question type takes a configurer, so nested questions read top to bottom with no `build()` calls, in the style of
+the Elasticsearch and AWS Java clients. Everything in one request runs in parallel on the server and shares one round
+trip. Only start a second request when an answer is needed to build the next state.
 
 ### State
 
 `state` is any Jackson-serializable value: a `String`, a `Map`, or your own record. Give questions named fields to point
-at (`` `email.body` ``) rather than one long string. `state(key, value)` adds a field to an object state you have already set.
+at (`` `email.body` ``) rather than one long string. `state(key, value)` adds a field to an object state, starting one
+if no state is set yet.
 
 ### Questions
 
 - `Noul.of(instructions)` asks yes or no; `whenTrue` and `whenFalse` describe the outcomes.
-- `Choice.of(instructions, labels...)` picks one label; `option(label, description)` describes a label, `option(label)` leaves it undescribed. Labels can also be the constants of an enum; see below.
+- `Choice.of(instructions, labels...)` picks one label; `option(label, description)` describes a label, `option(label)` leaves it undescribed. Labels can also be the constants of an enum; see [Asks](#asks).
 - `Score.of(instructions, levels...)` places the state on an ordered rubric of at least two levels.
 
 Instructions are optional when the criteria say enough on their own. Any description can be a plain string or a
 `Criterion` with `what`, `notFor`, and `examples`. Prebuilt questions are plain records and can be shared across requests.
 
-### Typed choices
+### Asks
 
-When the labels of a `Choice` are the constants of an enum you already have, build the question from the enum and read
-the answer back as that enum. A misspelled label is then a compile error, the probabilities are keyed by the constants,
-and a `switch` over the answer is exhaustive. The wire form is unchanged: the label is the constant's name.
+An `Ask` names the key and, for a choice, the enum once, where the question is declared. The response is read through
+it, so the key is never repeated and reading an answer as the wrong type is a compile error: `response.answer(CATEGORY)`
+is a `ChoiceAnswer<Category>`, `response.answer(URGENCY)` a `ScoreAnswer`.
+
+When the labels of a choice are the constants of an enum, a misspelled label is a compile error, the probabilities are
+keyed by the constants, and a `switch` expression over the answer must cover every constant. The wire form is unchanged: the label is the
+constant's name.
 
 ```java
 enum Dept { BILLING, SHIPPING, SECURITY }
 
-Choice<Dept> dept = Choice.of("Which team should handle `email`?", Dept.class);      // one option per constant
-Choice<Dept> described = Choice.builder(Dept.class)
-        .instructions("Which team should handle `email`?")
-        .option(Dept.BILLING, "Invoices, refunds, payment methods")
-        .option(Dept.SECURITY, o -> o.what("Credential theft").notFor("Legitimate requests"))
-        .build();                                                                     // only the constants named
+static final Ask<ChoiceAnswer<Dept>> DEPT =
+        Ask.choice("dept", Dept.class, Choice.of("Which team should handle `email`?", Dept.class));   // one option per constant
 
-TypeSafeResponse response = client.systemOne(Map.of("email", email), Map.of("dept", dept));
-
-ChoiceAnswer<Dept> answer = response.choice("dept", Dept.class);
+ChoiceAnswer<Dept> answer = client.systemOne(Map.of("email", email), DEPT).answer(DEPT);
 answer.choice();                            // Dept.SECURITY
 answer.probabilities().get(Dept.BILLING);   // 0.48
-switch (answer.choice()) {                  // exhaustive: a missing case is a compile error
-    case BILLING -> ...; case SHIPPING -> ...; case SECURITY -> ...;
-}
+String queue = switch (answer.choice()) {   // a switch expression must cover every constant
+    case BILLING -> "finance"; case SHIPPING -> "logistics"; case SECURITY -> "trust";
+};
 ```
 
-`response.choice("dept")` still returns the `String` form. Reading an answer as an enum that lacks one of its labels throws
-an `IllegalArgumentException` naming the label and the enum's constants.
+`Ask.choice(key, Dept.class, question)` throws when the ask is created if a label of the question is not a constant of
+`Dept`, rather than when the answer is read. `Ask.choice(key, question)` takes only a `Choice<String>` and reads back
+String labels, so an enum question has to name its enum.
+
+Asks mix with keyed questions in the builder, which is also where per-call options go:
+`client.systemOne(r -> r.state("email", email).ask(IS_PHISHING, CATEGORY).noul("spam", n -> ...), options)`. A request
+rejects a second question under an asked key. Asks are immutable handles, compared by identity, so declare each once,
+usually as a `static final` field. The factories return the subtypes of the sealed `Ask`, `NoulAsk`, `ChoiceAsk<E>`, and
+`ScoreAsk`; declare a field as the subtype to get its question typed (`NoulAsk.question()` is a `Noul`) and a choice's
+label type (`ChoiceAsk.labels()`).
+
+### Keyed questions
+
+Questions can also be keyed by plain strings, as in the Python and JavaScript SDKs: `systemOne(state, questions)` takes
+question types named `Noul`, `Choice`, and `Score` that take `(instructions, criteria)`, keyed by ids you choose, and the
+answers are read back by the same ids. Use this form when the keys are only known at runtime, or when porting code from
+the other SDKs.
+
+```java
+TypeSafeResponse response = client.systemOne(
+        Map.of("document", "I was charged twice. Please fix this ASAP."),
+        Map.of("category", Choice.of("What is this ticket about?", "billing", "technical", "other"),
+               "urgent", Noul.of("Does `document` convey urgency?")));
+
+response.choice("category").choice();   // "billing"
+response.noul("urgent");                // 0.0 to 1.0
+```
+
+The builder takes keyed questions too: `client.systemOne(r -> r.state(ticket).noul("urgent", n -> ...).score("severity", s -> ...))`.
+`response.choice(key, Dept.class)` reads a keyed enum choice back as the enum, and `response.choice(key)` as Strings;
+reading as an enum that lacks one of the labels throws an `IllegalArgumentException` naming the label and the enum's
+constants. `nouls()`, `choices()`, and `scores()` return every answer of a kind by key.
 
 ### Criteria-driven questions
 
@@ -167,7 +189,7 @@ TypeSafeClient.builder().apiKey(key).retryPolicy(RetryPolicy.none()).build();
 Any call accepts `RequestOptions` to override the client's timeout, retry policy, or headers for that call only:
 
 ```java
-client.systemOne(request, RequestOptions.of(o -> o.timeout(Duration.ofSeconds(30)).maxRetries(0)));
+client.systemOne(r -> r.state("email", email).ask(IS_PHISHING), RequestOptions.of(o -> o.timeout(Duration.ofSeconds(30)).maxRetries(0)));
 client.models().list(RequestOptions.of(o -> o.header("X-Trace", traceId)));
 ```
 
@@ -179,8 +201,8 @@ thread. They honor the same per-call `RequestOptions` and retry policy, and comp
 with the same `TypeSafeException` subclass the blocking call would throw.
 
 ```java
-client.systemOneAsync(r -> r.state(email).noul("is_phishing", n -> n.instructions("Is `email` phishing?")))
-        .thenAccept(response -> route(response.noul("is_phishing")))
+client.systemOneAsync(Map.of("email", email), IS_PHISHING)
+        .thenAccept(response -> route(response.answer(IS_PHISHING).noul()))
         .exceptionally(error -> { log.warn("phishing check failed", error); return null; });
 ```
 

@@ -111,6 +111,14 @@ public final class TypeSafeClient {
         return systemOne(TypeSafeRequest.of(state, questions), options);
     }
 
+    /**
+     * {@code client.systemOne(Map.of("email", email), URGENT, DEPT)}, then {@code response.answer(URGENT)}. For per-call
+     * options, ask through the builder: {@code systemOne(r -> r.state(email).ask(URGENT, DEPT), options)}.
+     */
+    public TypeSafeResponse systemOne(Object state, Ask<?> first, Ask<?>... more) {
+        return systemOne(TypeSafeRequest.of(state, first, more), RequestOptions.NONE);
+    }
+
     /** {@code client.systemOne(r -> r.state(ticket).noul("urgent", n -> n.instructions("Is `ticket` urgent?")))}. */
     public TypeSafeResponse systemOne(Consumer<TypeSafeRequest.Builder> configure) {
         return systemOne(TypeSafeRequest.of(configure), RequestOptions.NONE);
@@ -142,6 +150,11 @@ public final class TypeSafeClient {
 
     public CompletableFuture<TypeSafeResponse> systemOneAsync(Object state, Map<String, ? extends TypeSafeQuestion> questions, RequestOptions options) {
         return systemOneAsync(TypeSafeRequest.of(state, questions), options);
+    }
+
+    /** {@code client.systemOneAsync(Map.of("email", email), URGENT, DEPT)}; per-call options go through the builder form. */
+    public CompletableFuture<TypeSafeResponse> systemOneAsync(Object state, Ask<?> first, Ask<?>... more) {
+        return systemOneAsync(TypeSafeRequest.of(state, first, more), RequestOptions.NONE);
     }
 
     /** {@code client.systemOneAsync(r -> r.state(ticket).noul("urgent", n -> n.instructions("Is `ticket` urgent?")))}. */

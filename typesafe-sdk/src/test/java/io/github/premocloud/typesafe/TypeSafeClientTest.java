@@ -343,6 +343,78 @@ class TypeSafeClientTest {
         assertTrue(exception.getMessage().contains("[LOW, HIGH]"), exception.getMessage());
     }
 
+    private static final Ask<NoulAnswer> IS_PHISHING = Ask.noul("is_phishing", n -> n.instructions("Is `email` phishing?"));
+    private static final Ask<ChoiceAnswer<SpamCategory>> SPAM_CATEGORY = Ask.choice("spam_category", SpamCategory.class, c -> c
+            .instructions("Which category?")
+            .option(SpamCategory.PHISHING, "Credential theft")
+            .option(SpamCategory.MARKETING, "Promotions"));
+    private static final Ask<ScoreAnswer> URGENCY = Ask.score("urgency", Score.of("How urgent?", "none", "soft", "threatening"));
+
+    @Test
+    void systemOneAsksThroughAsksAndReadsTheAnswersBackTyped() throws Exception {
+        server.reply(200, RESPONSE_JSON);
+
+        TypeSafeResponse response = client.systemOne(Map.of("email", Map.of("subject", "URGENT")), IS_PHISHING, SPAM_CATEGORY, URGENCY);
+
+        JsonNode sent = objectMapper.readTree(server.recorded().get(0).body());
+        assertEquals("URGENT", sent.at("/state/email/subject").asText());
+        assertEquals(List.of("is_phishing", "spam_category", "urgency"), fieldNames(sent.at("/questions")));
+        assertEquals("Credential theft", sent.at("/questions/spam_category/criteria/PHISHING").asText());
+
+        double phishing = response.answer(IS_PHISHING).noul();
+        SpamCategory category = response.answer(SPAM_CATEGORY).choice();
+        ScoreAnswer urgency = response.answer(URGENCY);
+        assertEquals(0.93, phishing);
+        assertEquals(SpamCategory.PHISHING, category);
+        assertEquals(0.1, response.answer(SPAM_CATEGORY).probabilities().get(SpamCategory.MARKETING));
+        assertEquals(1.7, urgency.score());
+    }
+
+    @Test
+    void anAskWithStringLabelsReadsBackAsStrings() {
+        server.reply(200, RESPONSE_JSON);
+        Ask<ChoiceAnswer<String>> category = Ask.choice("spam_category", Choice.of("Which category?", "PHISHING", "MARKETING"));
+
+        TypeSafeResponse response = client.systemOne(r -> r.state("email", "text").ask(category, IS_PHISHING, URGENCY));
+
+        assertEquals("PHISHING", response.answer(category).choice());
+    }
+
+    @Test
+    void readingAnAskThatWasNotInTheRequestFailsLikeAMissingKey() {
+        server.reply(200, RESPONSE_JSON);
+        TypeSafeResponse response = client.systemOne(spamRequest());
+
+        IllegalArgumentException missing = assertThrows(IllegalArgumentException.class,
+                () -> response.answer(Ask.noul("nope", Noul.of("?"))));
+        assertTrue(missing.getMessage().contains("nope"), missing.getMessage());
+
+        IllegalArgumentException notAConstant = assertThrows(IllegalArgumentException.class,
+                () -> response.answer(Ask.choice("spam_category", Urgency.class, Choice.of("?", Urgency.class))));
+        assertTrue(notAConstant.getMessage().contains("[LOW, HIGH]"), notAConstant.getMessage());
+    }
+
+    @Test
+    void systemOneAsyncAsksThroughAsks() throws Exception {
+        server.reply(200, RESPONSE_JSON);
+        server.reply(200, RESPONSE_JSON);
+
+        TypeSafeResponse flat = client.systemOneAsync(Map.of("email", "text"), IS_PHISHING, SPAM_CATEGORY, URGENCY)
+                .get(5, TimeUnit.SECONDS);
+        TypeSafeResponse configured = client.systemOneAsync(r -> r.state("email", "text").ask(IS_PHISHING, SPAM_CATEGORY, URGENCY),
+                RequestOptions.of(o -> o.header("X-Trace", "t3"))).get(5, TimeUnit.SECONDS);
+
+        assertEquals(SpamCategory.PHISHING, flat.answer(SPAM_CATEGORY).choice());
+        assertEquals(0.93, configured.answer(IS_PHISHING).noul());
+        assertEquals("t3", server.recorded().get(1).headers().getFirst("X-Trace"));
+    }
+
+    private static List<String> fieldNames(JsonNode node) {
+        List<String> names = new java.util.ArrayList<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
+    }
+
     @Test
     void systemOneRejectsChoiceAnswerMissingItsChoice() {
         server.reply(200, """

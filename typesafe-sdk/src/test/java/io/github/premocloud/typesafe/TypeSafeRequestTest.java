@@ -128,6 +128,18 @@ class TypeSafeRequestTest {
         assertThrows(IllegalStateException.class, () -> TypeSafeRequest.builder().state("text").state("k", "v"));
     }
 
+    @Test
+    void namedStateFieldsStartAnObjectStateWhenNoneIsSet() {
+        TypeSafeRequest request = TypeSafeRequest.of(r -> r
+                .state("email", "Help! My payouts have been failing for 3 days.")
+                .state("context", Map.of("tier", "enterprise"))
+                .noul("is_urgent", n -> n.instructions("Does `email` convey urgency?")));
+
+        JsonNode json = objectMapper.valueToTree(request);
+        assertEquals("Help! My payouts have been failing for 3 days.", json.at("/state/email").asText());
+        assertEquals("enterprise", json.at("/state/context/tier").asText());
+    }
+
     enum Dept { BILLING, SHIPPING, SECURITY }
 
     @Test
@@ -164,6 +176,86 @@ class TypeSafeRequestTest {
         TypeSafeRequest request = TypeSafeRequest.of(r -> r.state("text").question("urgent", shared));
 
         assertSame(shared, request.questions().get("urgent"));
+    }
+
+    private static final Ask<NoulAnswer> URGENT = Ask.noul("urgent", n -> n.instructions("Does `email` need a reply today?"));
+    private static final Ask<ChoiceAnswer<Dept>> DEPT = Ask.choice("dept", Dept.class, c -> c
+            .instructions("Which team should handle `email`?")
+            .option(Dept.BILLING, "Invoices, refunds, payment methods")
+            .option(Dept.SECURITY));
+
+    @Test
+    void asksAddTheirQuestionsUnderTheirKeys() {
+        TypeSafeRequest request = TypeSafeRequest.of(r -> r
+                .state("email", "text")
+                .ask(URGENT, DEPT)
+                .noul("spam", n -> n.instructions("Is `email` spam?")));
+
+        assertEquals(List.of("urgent", "dept", "spam"), List.copyOf(request.questions().keySet()));
+        assertSame(URGENT.question(), request.questions().get("urgent"));
+        assertSame(DEPT.question(), request.questions().get("dept"));
+        assertEquals(objectMapper.valueToTree(Choice.builder(Dept.class)
+                        .instructions("Which team should handle `email`?")
+                        .option(Dept.BILLING, "Invoices, refunds, payment methods")
+                        .option(Dept.SECURITY).build()),
+                objectMapper.valueToTree(request).at("/questions/dept"));
+
+        TypeSafeRequest flat = TypeSafeRequest.of(Map.of("email", "text"), URGENT, DEPT);
+        assertEquals(request.questions().get("dept"), flat.questions().get("dept"));
+        assertEquals(List.of("urgent", "dept"), List.copyOf(flat.questions().keySet()));
+    }
+
+    @Test
+    void anEnumChoiceAskRejectsALabelThatIsNotAConstant() {
+        Choice<Dept> mislabeled = new Choice<>("Which team?", Map.of("LEGAL", "Contracts"));
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> Ask.choice("dept", Dept.class, mislabeled));
+
+        assertTrue(exception.getMessage().contains("'LEGAL'"), exception.getMessage());
+        assertTrue(exception.getMessage().contains("[BILLING, SHIPPING, SECURITY]"), exception.getMessage());
+    }
+
+    @Test
+    void asksExposeTheirQuestionTypedAndMirrorTheQuestionTypes() {
+        NoulAsk urgent = Ask.noul("urgent", Noul.of("Is it urgent?"));
+        ChoiceAsk<Dept> dept = Ask.choice("dept", Dept.class, Choice.of("Which team?", Dept.class));
+        ChoiceAsk<String> category = Ask.choice("category", c -> c.option("billing").option("other"));
+        ScoreAsk severity = Ask.score("severity", s -> s.level("minor").level("major"));
+
+        assertEquals("Is it urgent?", urgent.question().instructions());
+        assertEquals(Dept.class, dept.labels());
+        assertEquals(3, dept.question().criteria().size());
+        assertEquals(String.class, category.labels());
+        assertEquals(2, severity.question().criteria().size());
+
+        assertEquals(List.of(NoulAsk.class, ChoiceAsk.class, ScoreAsk.class), List.of(Ask.class.getPermittedSubclasses()));
+    }
+
+    @Test
+    void anAskNeedsAKeyAndAQuestion() {
+        assertThrows(NullPointerException.class, () -> Ask.noul(null, Noul.of("Is it urgent?")));
+        assertThrows(NullPointerException.class, () -> Ask.noul("urgent", (Noul) null));
+        assertThrows(NullPointerException.class, () -> Ask.choice("dept", Dept.class, (Choice<Dept>) null));
+        assertThrows(NullPointerException.class, () -> Ask.choice("category", (Choice<String>) null));
+        assertThrows(NullPointerException.class, () -> Ask.score("severity", (Score) null));
+    }
+
+    @Test
+    void anAskedKeyCannotBeAskedOrReplacedAgain() {
+        Ask<NoulAnswer> otherUrgent = Ask.noul("urgent", Noul.of("Is it urgent?"));
+
+        IllegalArgumentException twice = assertThrows(IllegalArgumentException.class,
+                () -> TypeSafeRequest.of(r -> r.state("text").ask(URGENT, otherUrgent)));
+        assertTrue(twice.getMessage().contains("'urgent'"), twice.getMessage());
+        assertThrows(IllegalArgumentException.class,
+                () -> TypeSafeRequest.of(r -> r.state("text").noul("urgent", n -> n.instructions("?")).ask(URGENT)));
+        assertThrows(IllegalArgumentException.class,
+                () -> TypeSafeRequest.of(r -> r.state("text").ask(URGENT).noul("urgent", n -> n.instructions("?"))));
+
+        TypeSafeRequest replaced = TypeSafeRequest.of(r -> r.state("text")
+                .noul("urgent", n -> n.instructions("first")).noul("urgent", n -> n.instructions("second")));
+        assertEquals("second", replaced.questions().get("urgent").instructions(), "keys without an Ask still replace");
     }
 
     @Test
