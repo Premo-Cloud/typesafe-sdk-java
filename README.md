@@ -270,6 +270,14 @@ A `TypeSafeClient` bean is then available for injection. The starter creates it 
 you define your own, and reuses the application's `ObjectMapper`. Properties, customization, testing, and troubleshooting
 are covered in the [starter README](typesafe-sdk-spring-boot-starter/README.md).
 
+## Examples
+
+Runnable programs in [`examples/`](examples): ticket triage, typed routing, an async batch, and a Spring Boot app.
+
+```
+TYPESAFE_API_KEY=your-key ./gradlew :examples:ticket-triage:run
+```
+
 ## Development
 
 ```
