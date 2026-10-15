@@ -52,6 +52,7 @@ public final class TicketTriage {
     }
 
     static String level(ScoreAnswer s) {
-        return "%.2f (%s)".formatted(s.score(), s.legend().get(String.valueOf(Math.round(s.score()))));
+        String likeliest = s.probabilities().entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
+        return "%.2f (%s)".formatted(s.score(), s.legend().get(likeliest));
     }
 }

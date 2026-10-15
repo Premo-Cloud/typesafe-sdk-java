@@ -2,12 +2,14 @@ package io.github.premocloud.typesafe.examples.triage;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.premocloud.typesafe.ScoreAnswer;
 import io.github.premocloud.typesafe.examples.support.StubTypeSafeServer;
 import io.github.premocloud.typesafe.examples.support.StubTypeSafeServer.Request;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -51,6 +53,14 @@ class TicketTriageTest {
             assertEquals("score", body.at("/questions/urgency/type").asText());
             assertEquals("score", body.at("/questions/refund_risk/type").asText());
         }
+    }
+
+    @Test
+    void labelsAScoreWithItsLikeliestLevelRatherThanItsRoundedMean() {
+        ScoreAnswer refundRisk = new ScoreAnswer(1.4, Map.of("0", 0.1, "1", 0.4, "2", 0.5), 0.55,
+                Map.of("0", "unlikely", "1", "possible", "2", "likely"));
+
+        assertEquals("%.2f (likely)".formatted(1.4), TicketTriage.level(refundRisk));
     }
 
     @Test

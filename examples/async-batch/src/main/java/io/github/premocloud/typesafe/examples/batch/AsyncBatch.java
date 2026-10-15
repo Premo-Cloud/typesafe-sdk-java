@@ -13,6 +13,7 @@ import io.github.premocloud.typesafe.TypeSafeResponse;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
@@ -24,8 +25,9 @@ public final class AsyncBatch {
         static Row of(String review, TypeSafeResponse response) {
             double spam = response.answer(IS_SPAM).noul();
             ScoreAnswer tone = response.answer(TONE);
+            String likeliest = tone.probabilities().entrySet().stream().max(Map.Entry.comparingByValue()).orElseThrow().getKey();
             return new Row(review, "%.0f%%".formatted(spam * 100),
-                    "%.2f (%s)".formatted(tone.score(), TONES.get((int) Math.round(tone.score()))));
+                    "%.2f (%s)".formatted(tone.score(), TONES.get(Integer.parseInt(likeliest))));
         }
 
         static Row failed(String review, Throwable error) {
