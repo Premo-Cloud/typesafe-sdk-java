@@ -3,7 +3,7 @@ plugins {
     id("com.vanniktech.maven.publish") version "0.37.0" apply false
 }
 
-subprojects {
+configure(listOf(project(":typesafe-sdk"), project(":typesafe-sdk-spring-boot-starter"))) {
     apply(plugin = "java-library")
     apply(plugin = "com.vanniktech.maven.publish")
 
